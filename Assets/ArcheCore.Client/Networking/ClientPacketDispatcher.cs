@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using ArcheCore.Library.Net.Worldserver;
 using LiteNetLib;
 using Shared;
 
@@ -7,12 +8,12 @@ namespace ArcheCore.Client.Networking
     public class PacketDispatcher
     {
         private readonly Dictionary<
-                Opcode,
+                Opcodes,
                 IClientPacketHandler>
             handlers = new();
 
         public void Register(
-            Opcode packet,
+            Opcodes packet,
             IClientPacketHandler handler)
         {
             handlers[packet] =
@@ -20,7 +21,7 @@ namespace ArcheCore.Client.Networking
         }
 
         public void Handle(
-            Opcode packet,
+            Opcodes packet,
             NetPacketReader reader)
         {
             if(handlers.TryGetValue(
