@@ -2,7 +2,6 @@
 using ArcheCore.Network.Shared.Packets.C2W;
 using ArcheCore.Network.Worldserver;
 using LiteNetLib;
-using Shared.Packets.C2W;
 using UnityEngine;
 
 namespace ArcheCore.Client.Networking.C2WSenders
