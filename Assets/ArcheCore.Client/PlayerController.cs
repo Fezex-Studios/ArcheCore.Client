@@ -1,6 +1,7 @@
 ﻿using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2W;
+using ArcheCore.Client.Networking.C2WSenders;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -132,7 +133,7 @@ namespace ArchCore.Client
             {
                 _sendTimer = 0f;
 
-                C2WPlayerMovePacket.Send(
+                C2WPlayerMovePacketSender.Send(
                     ClientNetwork.Instance.ServerPeer,
                     transform.position
                 );
