@@ -1,5 +1,6 @@
 ﻿using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
+using ArcheCore.Library.Net.Worldserver;
 using Client.Scripts;
 using LiteNetLib;
 using Shared;
@@ -69,12 +70,12 @@ namespace ArcheCore.Client.Networking
 
         private void RegisterHandlers()
         {
-            dispatcher.Register(Opcode.MOTD,           new W2CMOTDHandler());
-            dispatcher.Register(Opcode.SpawnPlayer,    new W2CSpawnPlayerHandler());
-            dispatcher.Register(Opcode.PlayerPosition, new W2CPlayerPositionHandler());
-            dispatcher.Register(Opcode.PlayerLeave,    new W2CPlayerLeaveHandler());
-            dispatcher.Register(Opcode.Announcement, new W2CAnnouncementHandler());
-            dispatcher.Register(Opcode.SpawnNpc, new W2CSpawnNpcHandler());
+            dispatcher.Register(Opcodes.MOTD,           new W2CMOTDHandler());
+            dispatcher.Register(Opcodes.SpawnPlayer,    new W2CSpawnPlayerHandler());
+            dispatcher.Register(Opcodes.PlayerPosition, new W2CPlayerPositionHandler());
+            dispatcher.Register(Opcodes.PlayerLeave,    new W2CPlayerLeaveHandler());
+            dispatcher.Register(Opcodes.Announcement, new W2CAnnouncementHandler());
+            dispatcher.Register(Opcodes.SpawnNpc, new W2CSpawnNpcHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
@@ -94,7 +95,7 @@ namespace ArcheCore.Client.Networking
             byte             channel,
             DeliveryMethod   delivery)
         {
-            Opcode packet = (Opcode)reader.GetUShort();
+            Opcodes packet = (Opcodes)reader.GetUShort();
             dispatcher.Handle(packet, reader);
             reader.Recycle();
         }
