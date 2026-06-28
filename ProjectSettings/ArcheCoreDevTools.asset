@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &1
+MonoBehaviour:
+  m_ObjectHideFlags: 53
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp-Editor:ArcheCore.Editor:ArcheCoreDevToolsSettings
+  serverPatchDir: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/SQL/patches
+  plaintextDbPath: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/StreamingAssets/GameData/_oggamedata.db
+  encryptedDbDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/StreamingAssets/GameData
+  authServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.Auth/bin/gamedata.db
