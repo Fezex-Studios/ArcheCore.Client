@@ -1,11 +1,12 @@
 ﻿using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
 using ArcheCore.Library.Net.Worldserver;
+using ArcheCore.Network.Client;
 using Client.Scripts;
 using LiteNetLib;
-using Shared;
+
 using UnityEngine;
-using UnityEngine.SceneManagement;
+
 
 namespace ArcheCore.Client.Networking
 {
@@ -19,7 +20,7 @@ namespace ArcheCore.Client.Networking
         public NetPeer ServerPeer     { get; private set; }
 
         private NetManager      client;
-        private readonly PacketDispatcher dispatcher = new();
+        private readonly ClientPacketDispatcher dispatcher = new();
 
         private void Awake()
         {

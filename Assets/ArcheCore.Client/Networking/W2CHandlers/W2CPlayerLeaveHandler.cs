@@ -1,7 +1,8 @@
 ﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Network.Client;
+using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
-using Shared.Components;
 
 namespace ArcheCore.Client.Networking.W2C
 {

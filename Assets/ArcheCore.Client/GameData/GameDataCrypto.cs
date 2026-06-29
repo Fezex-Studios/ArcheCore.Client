@@ -6,7 +6,7 @@ namespace ArcheCore.Client.GameData
 {
     /// <summary>
     /// Decrypts gamedata.db at runtime. Format on disk: [16-byte IV][AES-256-CBC ciphertext].
-    ///
+    //
     /// IMPORTANT — what this actually protects against: casual browsing of
     /// unreleased quest/item/dialog text in a tool like DB Browser for SQLite.
     /// It does NOT protect against a determined reverse engineer — the key

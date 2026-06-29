@@ -1,6 +1,8 @@
+using ArcheCore.Network.Client;
+using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
-using Shared.Packets;
+
 using UnityEngine;
 
 namespace ArcheCore.Client.Networking.W2C
