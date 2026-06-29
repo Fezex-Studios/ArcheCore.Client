@@ -2,6 +2,7 @@
 using ArcheCore.Network.Shared.Packets.C2W;
 using ArcheCore.Network.Worldserver;
 using LiteNetLib;
+using Shared;
 using UnityEngine;
 
 namespace ArcheCore.Client.Networking.C2WSenders
@@ -15,7 +16,7 @@ namespace ArcheCore.Client.Networking.C2WSenders
             if (peer == null)
                 return;
 
-            PacketSender.SendPacket(
+            ClientPacketSender.SendPacket(
                 peer,
                 Opcodes.PlayerMove,
                 new C2WPlayerMovePacket

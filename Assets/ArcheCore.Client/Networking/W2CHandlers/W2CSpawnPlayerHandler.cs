@@ -1,7 +1,8 @@
 ﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Network.Client;
 using LiteNetLib;
 using MessagePack;
-using Shared.Components;
+using ArcheCore.Network.Shared.Packets.W2C;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
