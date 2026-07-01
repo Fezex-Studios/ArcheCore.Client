@@ -1,3 +1,10 @@
 <linker>
   <assembly fullname="Unity.RenderPipelines.HighDefinition.Runtime" preserve="all"/>
+  <assembly fullname="MoonSharp.Interpreter">
+    <type fullname="MoonSharp.*" preserve="all" />
+  </assembly>
+  <assembly fullname="Assembly-CSharp">
+    <type fullname="ArcheCore.Client.UI.*" preserve="all" />
+    <type fullname="ArcheCore.Client.Networking.*" preserve="all" />
+  </assembly>
 </linker>

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ArcheCore.Client.Gameplay
@@ -35,6 +36,9 @@ namespace ArcheCore.Client.Gameplay
 
         private void HandleZoom()
         {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
             float scroll = Mouse.current.scroll.ReadValue().y;
             distance    -= scroll * zoomSpeed * 0.01f;
             distance     = Mathf.Clamp(distance, minDistance, maxDistance);
@@ -46,6 +50,10 @@ namespace ArcheCore.Client.Gameplay
             bool leftClick  = Mouse.current.leftButton.isPressed;
 
             if (!rightClick && !leftClick) return;
+
+            // Don't hijack clicks that are meant for UI
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
 
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible   = false;
@@ -62,12 +70,13 @@ namespace ArcheCore.Client.Gameplay
             bool rightClick = Mouse.current.rightButton.isPressed;
             bool leftClick  = Mouse.current.leftButton.isPressed;
 
-            if (!rightClick && !leftClick)
+            bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+            if ((!rightClick && !leftClick) || overUI)
             {
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible   = true;
             }
-
             Quaternion rotation   = Quaternion.Euler(_pitch, _yaw, 0f);
             Vector3    desiredPos = _target.position
                 - rotation * Vector3.forward * distance
