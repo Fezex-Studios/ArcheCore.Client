@@ -1,4 +1,5 @@
 ﻿using ArcheCore.Client.Networking;
+using ArcheCore.Client.UI;
 using ArcheCore.Network.Client;
 using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
@@ -21,6 +22,9 @@ namespace ArcheCore.Client.Networking.W2C
 
             Debug.Log(
                 $"MOTD: {packet.Message}");
+
+            
+            HudMessageDisplay.QueueOrShow(packet.Message);
         }
     }
 }
