@@ -12,7 +12,7 @@ namespace ArcheCore.Client.Networking.W2C
         {
             W2CPlayerLevelResponsePacket packet =
                 MessagePackSerializer.Deserialize<W2CPlayerLevelResponsePacket>(reader.GetRemainingBytes());
-            UIManager.Instance.CallLuaFunction("OnPlayerLevelReceived",packet.Level);
+            PlayerLevelDisplay.Instance.SetLevel(packet.Level);
             
         }
     }
