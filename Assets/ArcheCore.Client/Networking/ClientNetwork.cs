@@ -78,6 +78,7 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.Announcement, new W2CAnnouncementHandler());
             dispatcher.Register(Opcodes.SpawnNpc, new W2CSpawnNpcHandler());
             dispatcher.Register(Opcodes.W2CTestPacket, new W2CTestPacketHandler());
+            dispatcher.Register(Opcodes.PlayerLevelResponse, new W2CPlayerlevelResponseHandler()); // NEW
         }
 
         public void OnPeerConnected(NetPeer peer)
