@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp-Editor:ArcheCore.Editor:ArcheCoreDevToolsSettings
-  serverPatchDir: 
-  plaintextDbPath: 
-  encryptedDbDir: 
-  authServerDbPath: 
+  serverPatchDir: C:/Users/aidan/Desktop
+  plaintextDbPath: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/StreamingAssets/GameData/_oggamedata.db
+  encryptedDbDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/StreamingAssets/GameData
+  authServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.Auth/bin/gamedata.db

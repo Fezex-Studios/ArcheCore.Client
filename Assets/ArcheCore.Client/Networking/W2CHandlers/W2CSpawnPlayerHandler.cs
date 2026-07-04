@@ -1,4 +1,5 @@
 ﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Client.UI;
 using ArcheCore.Network.Client;
 using LiteNetLib;
 using MessagePack;
@@ -21,14 +22,11 @@ namespace ArcheCore.Client.Networking.W2C
 
             if (packet.IsLocalPlayer)
             {
-                ClientNetwork.Instance
-                        .LocalNetworkId =
-                    packet.NetworkId;
+                ClientNetwork.Instance.LocalNetworkId = packet.NetworkId;
+                PlayerUIEvents.RaiseCharacterSpawned();
             }
 
-            ClientNetwork.Instance
-                .StartCoroutine(
-                    LoadWorldThenSpawn(packet));
+            ClientNetwork.Instance.StartCoroutine(LoadWorldThenSpawn(packet));
         }
 
         private System.Collections.IEnumerator LoadWorldThenSpawn(
