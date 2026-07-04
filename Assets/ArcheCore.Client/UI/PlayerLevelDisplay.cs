@@ -1,6 +1,5 @@
 ﻿using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2W;
 
@@ -8,22 +7,20 @@ namespace ArcheCore.Client.UI
 {
     public class PlayerLevelDisplay : MonoBehaviour
     {
-        public static PlayerLevelDisplay Instance { get; private set; }
-
         [SerializeField] private TMP_Text levelLabel;
-        [SerializeField] private Button getLevelButton;
 
-        private void Awake()
+        private void OnEnable()
         {
-            Instance = this;
+            PlayerUIEvents.OnLevelChanged += SetLevel;
+            RequestLevel();
         }
 
-        private void Start()
+        private void OnDisable()
         {
-            getLevelButton.onClick.AddListener(OnGetLevelClicked);
+            PlayerUIEvents.OnLevelChanged -= SetLevel;
         }
 
-        private void OnGetLevelClicked()
+        private void RequestLevel()
         {
             if (ClientNetwork.Instance.ServerPeer == null)
             {
@@ -35,7 +32,7 @@ namespace ArcheCore.Client.UI
             C2WRequestPlayerLevelPacketSender.Send(ClientNetwork.Instance.ServerPeer);
         }
 
-        public void SetLevel(int level)
+        private void SetLevel(int level)
         {
             levelLabel.text = $"Level: {level}";
         }

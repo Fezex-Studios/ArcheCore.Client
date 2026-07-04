@@ -7,8 +7,10 @@ namespace ArcheCore.Client.UI
         public static event Action<int> OnLevelChanged;
         public static void RaiseLevelChanged(int level) => OnLevelChanged?.Invoke(level);
 
-        // future stats slot in the same way, no manager growth needed:
-        // public static event Action<int> OnHealthChanged;
-        // public static event Action<int> OnGoldChanged;
+        public static event Action OnCharacterNotFound;
+        public static event Action OnCharacterSpawned;
+
+        public static void RaiseCharacterNotFound() => OnCharacterNotFound?.Invoke();
+        public static void RaiseCharacterSpawned()  => OnCharacterSpawned?.Invoke();
     }
 }
