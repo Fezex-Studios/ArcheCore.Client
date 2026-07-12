@@ -4,27 +4,33 @@ using Client.Scripts;
 
 using UnityEngine;
 
-/// <summary>
-/// Reads command-line arguments and auto-connects when a -token is present.
-///
-/// Why Awake + Start split:
-///   Awake  — parse args and store token. Runs before any Start().
-///   Start  — call Connect(). By this point ALL Awake() calls in the scene
-///             have finished, so ClientNetwork.Instance is guaranteed non-null.
-///
-/// No Script Execution Order setting required.
-/// </summary>
 public class CommandLineBootstrap : MonoBehaviour
 {
     [Tooltip("IP used when no -ip argument is passed.")]
     [SerializeField] private string fallbackIp = "127.0.0.1";
 
+#if UNITY_EDITOR
+    [Header("Editor Testing Only - not used in builds")]
+    [SerializeField] private string editorToken = "";
+    [SerializeField] private string editorIp    = "127.0.0.1";
+#endif
+
     private string _connectIp;
     private bool   _shouldAutoConnect;
 
-    // ── Phase 1: parse only. No Connect() here. ──────────────────────────────
     private void Awake()
     {
+#if UNITY_EDITOR
+        if (!string.IsNullOrEmpty(editorToken))
+        {
+            SessionManager.Token = editorToken;
+            _connectIp         = string.IsNullOrEmpty(editorIp) ? fallbackIp : editorIp;
+            _shouldAutoConnect = true;
+            Debug.Log($"[Bootstrap] Using Editor token override: {editorToken}");
+            return;
+        }
+#endif
+
         string[] args = System.Environment.GetCommandLineArgs();
 
         string token = null;
@@ -55,7 +61,6 @@ public class CommandLineBootstrap : MonoBehaviour
         }
     }
 
-    // ── Phase 2: connect. All Awake() calls done — Instance is safe. ─────────
     private void Start()
     {
         if (!_shouldAutoConnect)

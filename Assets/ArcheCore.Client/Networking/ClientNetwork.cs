@@ -1,4 +1,5 @@
-﻿using ArcheCore.Client.Networking.C2W;
+﻿using ArchCore.Client;
+using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
 using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Client;
@@ -16,8 +17,14 @@ namespace ArcheCore.Client.Networking
     {
         public static ClientNetwork Instance;
 
-        public int     LocalNetworkId { get; set; }
-        public NetPeer ServerPeer     { get; private set; }
+#if UNITY_EDITOR
+        [Header("Editor Testing Only - not used in builds")]
+        [SerializeField] private string editorToken = "";
+#endif
+
+        public int              LocalNetworkId { get; set; }
+        public NetPeer          ServerPeer     { get; private set; }
+        public PlayerController LocalPlayer    { get; set; }
 
         private NetManager      client;
         private readonly ClientPacketDispatcher dispatcher = new();
@@ -38,6 +45,15 @@ namespace ArcheCore.Client.Networking
 
         private void ReadCommandLineToken()
         {
+#if UNITY_EDITOR
+            if (!string.IsNullOrEmpty(editorToken))
+            {
+                SessionManager.Token = editorToken;
+                Debug.Log($"[ClientNetwork] Using Editor token override: {editorToken}");
+                return;
+            }
+#endif
+
             string[] args = System.Environment.GetCommandLineArgs();
 
             for (int i = 0; i < args.Length; i++)
@@ -80,6 +96,11 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CTestPacket, new W2CTestPacketHandler());
             dispatcher.Register(Opcodes.PlayerLevelResponse, new W2CPlayerlevelResponseHandler()); // NEW
             dispatcher.Register(Opcodes.W2CCharacterNotFound, new W2CCharacterNotFoundHandler());
+
+            // --- Interaction system ---
+            dispatcher.Register(Opcodes.W2CInteractDialogue, new W2CInteractDialogueHandler());
+            dispatcher.Register(Opcodes.W2CInteractLoot,      new W2CInteractLootHandler());
+            dispatcher.Register(Opcodes.W2CInteractDenied,    new  W2CInteractDeniedHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

@@ -1,4 +1,5 @@
-﻿using ArcheCore.Client.Gameplay;
+﻿using ArchCore.Client;
+using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.UI;
 using ArcheCore.Network.Client;
 using LiteNetLib;
@@ -42,13 +43,17 @@ namespace ArcheCore.Client.Networking.W2C
                 yield return load;
             }
 
-            PlayerRegistry.Instance?.Spawn(
-                packet.NetworkId,
-                new Vector3(
-                    packet.x,
-                    packet.y,
-                    packet.z),
-                packet.IsLocalPlayer);
+            PlayerController pc =
+                PlayerRegistry.Instance?.Spawn(
+                    packet.NetworkId,
+                    new Vector3(
+                        packet.x,
+                        packet.y,
+                        packet.z),
+                    packet.IsLocalPlayer);
+
+            if (packet.IsLocalPlayer && pc != null)
+                ClientNetwork.Instance.LocalPlayer = pc;
         }
     }
 }

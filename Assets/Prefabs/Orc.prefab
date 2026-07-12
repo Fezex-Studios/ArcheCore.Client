@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 5341845104427012343}
   - component: {fileID: 5474886199510250595}
   - component: {fileID: 1826723525359068970}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -124,7 +124,7 @@ GameObject:
   - component: {fileID: 2591720714885090984}
   - component: {fileID: 665204557417062263}
   - component: {fileID: 6709227630213478910}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Orc
   m_TagString: NpcSpawner
   m_Icon: {fileID: 0}

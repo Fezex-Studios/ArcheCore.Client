@@ -41,6 +41,15 @@ namespace ArcheCore.Client.Networking.W2C
             identity.NpcName    = packet.Name;
             identity.Level      = packet.Level;
 
+            // Makes this NPC a valid target for PlayerInteraction's raycast.
+            // NOTE: the prefab's collider also needs to be on the layer
+            // PlayerInteraction is configured to raycast against - set that
+            // in the Inspector on your NPC prefab, this can't be done from
+            // code alone.
+            var interactable = obj.AddComponent<InteractableIdentity>();
+            interactable.NetworkId = packet.NetworkId;
+            interactable.InteractRange = packet.InteractRange;
+
             Debug.Log($"[SpawnNpc] Spawned '{packet.Name}' (Lv{packet.Level}) at {obj.transform.position}");
         }
     }

@@ -11,6 +11,7 @@ namespace ArcheCore.Client.Gameplay
 
         [SerializeField] private GameObject        playerPrefab;
         [SerializeField] private CinemachineCamera virtualCamera;
+        [SerializeField] private LayerMask         interactableLayer;
 
         private Dictionary<int, PlayerController> players = new();
 
@@ -20,18 +21,22 @@ namespace ArcheCore.Client.Gameplay
         }
 
         public PlayerController Spawn(
-            int     networkId,
+            int networkId,
             Vector3 position,
-            bool    isLocal)
+            bool isLocal)
         {
+            if (players.ContainsKey(networkId))
+                Despawn(networkId);
+
             GameObject go = Instantiate(
                 playerPrefab,
                 position,
                 Quaternion.identity);
 
             PlayerController pc = go.GetComponent<PlayerController>();
-            pc.networkId     = networkId;
+            pc.networkId = networkId;
             pc.isLocalPlayer = isLocal;
+
             players[networkId] = pc;
 
             // Assign Cinemachine target when local player spawns
@@ -40,9 +45,22 @@ namespace ArcheCore.Client.Gameplay
                 var mmoCamera = FindFirstObjectByType<MMOCamera>();
                 if (mmoCamera != null)
                     mmoCamera.SetTarget(go.transform);
+
+                // Interaction is a local-only concern (raycast + input),
+                // same reason MMOCamera only gets wired up for isLocal.
+                var interaction = go.GetComponent<PlayerInteraction>();
+                if (interaction == null)
+                    interaction = go.AddComponent<PlayerInteraction>();
+
+                interaction.Configure(interactableLayer);
             }
 
             return pc;
+        }
+
+        public bool TryGetPlayer(int networkId, out PlayerController pc)
+        {
+            return players.TryGetValue(networkId, out pc);
         }
 
         public void UpdatePosition(int networkId, Vector3 position)

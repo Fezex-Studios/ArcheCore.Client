@@ -47,9 +47,8 @@ namespace ArcheCore.Client.Gameplay
         private void HandleRotation()
         {
             bool rightClick = Mouse.current.rightButton.isPressed;
-            bool leftClick  = Mouse.current.leftButton.isPressed;
 
-            if (!rightClick && !leftClick) return;
+            if (!rightClick) return;
 
             // Don't hijack clicks that are meant for UI
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
@@ -68,15 +67,15 @@ namespace ArcheCore.Client.Gameplay
         private void PositionCamera()
         {
             bool rightClick = Mouse.current.rightButton.isPressed;
-            bool leftClick  = Mouse.current.leftButton.isPressed;
 
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-            if ((!rightClick && !leftClick) || overUI)
+            if (!rightClick || overUI)
             {
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible   = true;
             }
+
             Quaternion rotation   = Quaternion.Euler(_pitch, _yaw, 0f);
             Vector3    desiredPos = _target.position
                 - rotation * Vector3.forward * distance

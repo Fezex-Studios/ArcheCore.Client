@@ -25,6 +25,10 @@ namespace ArchCore.Client
         private float _sendTimer;
         private const float SendRate = 0.05f;
 
+
+        private Vector3? _autoMoveTarget;
+        private float _autoMoveStopDistance;
+
         private void Start()
         {
             _targetPosition = transform.position;
@@ -54,6 +58,19 @@ namespace ArchCore.Client
             // WASD input
             Vector2 input = Vector2.zero;
 
+            bool manualInputThisFrame =
+                Keyboard.current != null &&
+                (
+                    Keyboard.current.wKey.isPressed ||
+                    Keyboard.current.aKey.isPressed ||
+                    Keyboard.current.sKey.isPressed ||
+                    Keyboard.current.dKey.isPressed
+                );
+
+            // Manual WASD always wins - cancel any pending click-to-interact walk.
+            if (manualInputThisFrame)
+                _autoMoveTarget = null;
+
             if (Keyboard.current != null)
             {
                 input = new Vector2(
@@ -67,7 +84,29 @@ namespace ArchCore.Client
 
             Vector3 move = Vector3.zero;
 
-            if (input != Vector2.zero && _mmoCamera != null)
+            if (_autoMoveTarget.HasValue)
+            {
+                Vector3 toTarget = _autoMoveTarget.Value - transform.position;
+                toTarget.y = 0f;
+
+                if (toTarget.magnitude <= _autoMoveStopDistance)
+                {
+                    // Arrived - PlayerInteraction's CheckArrival will pick this up
+                    // next frame and fire the actual interact packet.
+                    _autoMoveTarget = null;
+                }
+                else
+                {
+                    move = toTarget.normalized * moveSpeed;
+
+                    transform.rotation = Quaternion.Slerp(
+                        transform.rotation,
+                        Quaternion.LookRotation(toTarget.normalized),
+                        Time.deltaTime * 10f
+                    );
+                }
+            }
+            else if (input != Vector2.zero && _mmoCamera != null)
             {
                 Vector3 forward = _mmoCamera.GetCameraForward();
                 Vector3 right = _mmoCamera.GetCameraRight();
@@ -79,10 +118,7 @@ namespace ArchCore.Client
 
                 bool mouseHeld =
                     Mouse.current != null &&
-                    (
-                        Mouse.current.leftButton.isPressed ||
-                        Mouse.current.rightButton.isPressed
-                    );
+                    Mouse.current.rightButton.isPressed;
 
                 if (mouseHeld)
                 {
@@ -138,6 +174,17 @@ namespace ArchCore.Client
                     transform.position
                 );
             }
+        }
+
+        public void SetAutoMoveTarget(Vector3 target, float stopDistance)
+        {
+            _autoMoveTarget = target;
+            _autoMoveStopDistance = stopDistance;
+        }
+
+        public void CancelAutoMove()
+        {
+            _autoMoveTarget = null;
         }
 
         private void HandleRemoteMovement()
