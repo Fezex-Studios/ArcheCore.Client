@@ -1,12 +1,13 @@
 ﻿using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2W;
+using ArcheCore.Client.UI.Interfaces;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace ArcheCore.Client.UI
 {
-    public class CharacterCreateUI : MonoBehaviour
+    public class CharacterCreateUI : MonoBehaviour, IUIScreen
     {
         [SerializeField] private TMP_InputField nameInput;
         [SerializeField] private Button         createButton;
@@ -15,21 +16,9 @@ namespace ArcheCore.Client.UI
         private void Awake()
         {
             createButton.onClick.AddListener(OnCreateClicked);
-            PlayerUIEvents.OnCharacterNotFound += OnCharacterNotFound;
-        }
-        private void Start()
-        {
-            // Hide AFTER Awake has run and subscriptions are set up
-            gameObject.SetActive(false);
         }
 
-        private void OnDestroy()
-        {
-            PlayerUIEvents.OnCharacterNotFound -= OnCharacterNotFound;
-            PlayerUIEvents.OnCharacterSpawned  -= OnCharacterSpawned;
-        }
-
-        private void OnCharacterNotFound()
+        public void Show()
         {
             gameObject.SetActive(true);
             nameInput.text = string.Empty;
@@ -37,15 +26,9 @@ namespace ArcheCore.Client.UI
             createButton.interactable = true;
             nameInput.Select();
             nameInput.ActivateInputField();
-
-            PlayerUIEvents.OnCharacterSpawned += OnCharacterSpawned;
         }
 
-        private void OnCharacterSpawned()
-        {
-            gameObject.SetActive(false);
-            PlayerUIEvents.OnCharacterSpawned -= OnCharacterSpawned;
-        }
+        public void Hide() => gameObject.SetActive(false);
 
         private void OnCreateClicked()
         {
