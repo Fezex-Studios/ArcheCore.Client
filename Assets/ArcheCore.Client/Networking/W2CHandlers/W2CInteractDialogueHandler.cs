@@ -3,6 +3,7 @@ using ArcheCore.Network.Client;
 using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
+using UnityEngine;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -13,10 +14,17 @@ namespace ArcheCore.Client.Networking.W2C
     {
         public void Handle(NetPacketReader reader)
         {
-            var packet = MessagePackSerializer
-                .Deserialize<W2CInteractDialoguePacket>(reader.GetRemainingBytes());
+            Debug.Log("[W2CInteractDialogue] *** PACKET RECEIVED ***");
 
-            HudMessageDisplay.QueueOrShow($"{packet.SpeakerName}: {packet.Text}");
+            var packet = MessagePackSerializer
+                .Deserialize<W2CInteractDialoguePacket>(
+                    reader.GetRemainingBytes());
+
+            Debug.Log(
+                $"[W2CInteractDialogue] Speaker={packet.SpeakerName}, Text={packet.Text}");
+
+            HudMessageDisplay.QueueOrShow(
+                $"{packet.SpeakerName}: {packet.Text}");
         }
     }
 }

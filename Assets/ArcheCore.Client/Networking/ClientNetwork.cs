@@ -75,9 +75,34 @@ namespace ArcheCore.Client.Networking
 
         public void Connect(string ip)
         {
+            // If a previous session left a client running (e.g. Stop/Play again
+            // in the Editor without a clean shutdown), tear it down first so we
+            // don't try to bind a second socket on the same port.
+            if (client != null)
+            {
+                client.Stop();
+                client = null;
+            }
+
+            ServerPeer = null;
+
             client = new NetManager(this);
-            client.Start();
+
+            if (!client.Start())
+            {
+                Debug.LogError("[ClientNetwork] Failed to start NetManager — local port may already be in use.");
+                return;
+            }
+
             client.Connect(ip, 7777, "MMO");
+        }
+        private void OnDestroy()
+        {
+            client?.Stop();
+        }
+        private void OnApplicationQuit()
+        {
+            client?.Stop();
         }
 
         private void Update()
@@ -93,14 +118,20 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.PlayerLeave,    new W2CPlayerLeaveHandler());
             dispatcher.Register(Opcodes.Announcement, new W2CAnnouncementHandler());
             dispatcher.Register(Opcodes.SpawnNpc, new W2CSpawnNpcHandler());
+            dispatcher.Register(Opcodes.NpcPosition, new W2CNpcPositionHandler());
+            dispatcher.Register(Opcodes.NpcDespawn, new W2CNpcDespawnHandler());
+            
             dispatcher.Register(Opcodes.W2CTestPacket, new W2CTestPacketHandler());
-            dispatcher.Register(Opcodes.PlayerLevelResponse, new W2CPlayerlevelResponseHandler()); // NEW
-            dispatcher.Register(Opcodes.W2CCharacterNotFound, new W2CCharacterNotFoundHandler());
+            dispatcher.Register(Opcodes.PlayerLevelResponse, new W2CPlayerlevelResponseHandler());
+
+            // NEW — replaces W2CCharacterNotFound in the login flow
+            dispatcher.Register(Opcodes.W2CCharacterList, new W2CCharacterListHandler());
 
             // --- Interaction system ---
             dispatcher.Register(Opcodes.W2CInteractDialogue, new W2CInteractDialogueHandler());
             dispatcher.Register(Opcodes.W2CInteractLoot,      new W2CInteractLootHandler());
             dispatcher.Register(Opcodes.W2CInteractDenied,    new  W2CInteractDeniedHandler());
+            dispatcher.Register(Opcodes.ChatMessage, new W2CChatMessageHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
@@ -125,7 +156,11 @@ namespace ArcheCore.Client.Networking
             reader.Recycle();
         }
 
-        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo info) { }
+        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo info)
+        {
+            if (ServerPeer == peer)
+                ServerPeer = null;
+        }
         public void OnConnectionRequest(ConnectionRequest request) { }
         public void OnNetworkError(System.Net.IPEndPoint endPoint, System.Net.Sockets.SocketError error) { }
         public void OnNetworkLatencyUpdate(NetPeer peer, int latency) { }

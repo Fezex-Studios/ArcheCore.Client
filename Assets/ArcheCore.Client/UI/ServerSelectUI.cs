@@ -15,7 +15,7 @@ namespace Shared
         
         public void Connect()
         {
-            ClientNetwork.Instance.Connect(ipInput.text);
+            ClientNetwork.Instance.Connect("127.0.0.1");
         }
     }
 }

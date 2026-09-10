@@ -24,6 +24,8 @@ MonoBehaviour:
     m_path: Assets/ArcheCore.Client/World/server_select.unity
   - m_enabled: 1
     m_path: Assets/ArcheCore.Client/World/main_world.unity
+  - m_enabled: 1
+    m_path: Assets/ArcheCore.Client/World/main_world_main.unity
   m_HasScriptingDefines: 0
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:

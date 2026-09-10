@@ -14,7 +14,9 @@ namespace ArchCore.Client
     {
         [SerializeField] private float interactRange = 4f;
         [SerializeField] private LayerMask interactableLayer;
-
+        [SerializeField] private Key debugOverlayToggleKey = Key.F3;
+        
+        private bool _showDebugOverlay = false;
         private Camera _cam;
         private PlayerController _controller;
         private InteractableIdentity _hovered;
@@ -48,6 +50,8 @@ namespace ArchCore.Client
 
             if (clicked || fPressed)
                 TryInteract();
+            if(Keyboard.current!= null && Keyboard.current[debugOverlayToggleKey].wasPressedThisFrame)
+                _showDebugOverlay = !_showDebugOverlay;
 
             CheckArrival();
         }
@@ -119,6 +123,9 @@ namespace ArchCore.Client
 
         private void OnGUI()
         {
+            if (!_showDebugOverlay)
+                return;
+            
             GUIStyle style = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 18,

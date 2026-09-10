@@ -7,27 +7,47 @@ namespace ArcheCore.Client.UI
 {
     public class LoginScreenManager : MonoBehaviour
     {
-        [SerializeField] private ServerSelectUI    serverSelect;
-        [SerializeField] private CharacterCreateUI characterCreate;
+        [SerializeField] private ServerSelectUI     serverSelect;
+        [SerializeField] private CharacterCreateUI  characterCreate;
+        [SerializeField] private CharacterSelectUI  characterSelect;
 
         private IUIScreen current;
 
         private void Awake()
         {
-            PlayerUIEvents.OnCharacterNotFound += HandleCharacterNotFound;
-            PlayerUIEvents.OnCharacterSpawned  += HandleCharacterSpawned;
+            PlayerUIEvents.OnCharacterListReceived += HandleCharacterListReceived;
+            PlayerUIEvents.OnCharacterSpawned      += HandleCharacterSpawned;
+
+            characterSelect.OnCreateNewRequested += HandleCreateNewRequested;
         }
 
         private void OnDestroy()
         {
-            PlayerUIEvents.OnCharacterNotFound -= HandleCharacterNotFound;
-            PlayerUIEvents.OnCharacterSpawned  -= HandleCharacterSpawned;
+            PlayerUIEvents.OnCharacterListReceived -= HandleCharacterListReceived;
+            PlayerUIEvents.OnCharacterSpawned      -= HandleCharacterSpawned;
+
+            characterSelect.OnCreateNewRequested -= HandleCreateNewRequested;
         }
 
         private void Start() => SwitchTo(serverSelect);
 
-        private void HandleCharacterNotFound() => SwitchTo(characterCreate);
-        private void HandleCharacterSpawned()  => current?.Hide();
+        private void HandleCharacterListReceived(
+            ArcheCore.Network.Shared.Packets.PersistenceServer.P2W.CharacterSummary[] characters)
+        {
+            if (characters.Length == 0)
+            {
+                SwitchTo(characterCreate);
+            }
+            else
+            {
+                SwitchTo(characterSelect);
+                characterSelect.Populate(characters);
+            }
+        }
+
+        private void HandleCreateNewRequested() => SwitchTo(characterCreate);
+
+        private void HandleCharacterSpawned() => current?.Hide();
 
         private void SwitchTo(IUIScreen next)
         {

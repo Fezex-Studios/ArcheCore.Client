@@ -3,6 +3,7 @@ using MessagePack;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using ArcheCore.Client.World;
+using ArcheCore.Client.Gameplay;
 using ArcheCore.Network.Client;
 using ArcheCore.Network.Shared.Packets.W2C;
 
@@ -40,6 +41,11 @@ namespace ArcheCore.Client.Networking.W2C
             identity.TemplateId = packet.TemplateId;
             identity.NpcName    = packet.Name;
             identity.Level      = packet.Level;
+
+            // Without this, nothing can ever find this NPC again to move or
+            // despawn it - W2CNpcPositionHandler/W2CNpcDespawnHandler both
+            // look entities up by NetworkId through this registry.
+            NpcRegistry.Instance?.Register(identity);
 
             // Makes this NPC a valid target for PlayerInteraction's raycast.
             // NOTE: the prefab's collider also needs to be on the layer

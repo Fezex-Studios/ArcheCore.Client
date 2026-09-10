@@ -1,0 +1,10 @@
+:root {
+}
+
+.Button {
+    flex-direction: column;
+    flex-basis: auto;
+    justify-content: center;
+    align-items: stretch;
+    align-self: center;
+}
