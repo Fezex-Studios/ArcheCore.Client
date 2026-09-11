@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d06cddd8baa074946b7cdb46fdd3543a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Resources/TIM/Console Setting.asset
+  uploadId: 636524

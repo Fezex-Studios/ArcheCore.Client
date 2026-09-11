@@ -7,11 +7,13 @@ using UnityEngine.UI;
 
 namespace ArcheCore.Client.UI
 {
-    public class CharacterCreateUI : MonoBehaviour, IUIScreen
+    public class CharacterCreateUI : MonoBehaviour, IUIPanel
     {
         [SerializeField] private TMP_InputField nameInput;
         [SerializeField] private Button         createButton;
         [SerializeField] private TMP_Text       errorText;
+
+        public bool IsVisible => gameObject.activeSelf;
 
         private void Awake()
         {

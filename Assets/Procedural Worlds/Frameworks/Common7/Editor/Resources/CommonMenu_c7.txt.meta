@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 8c620c05725815f459b235bc97e108ea
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264629
+  packageName: Gaia for Unity 6
+  packageVersion: 4.2.5
+  assetPath: Assets/Procedural Worlds/Frameworks/Common7/Editor/Resources/CommonMenu_c7.txt
+  uploadId: 940642

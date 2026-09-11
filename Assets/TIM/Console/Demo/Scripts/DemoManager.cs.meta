@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: b8e7b5259cf780a498b7e4c8c071e73e
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Demo/Scripts/DemoManager.cs
+  uploadId: 636524

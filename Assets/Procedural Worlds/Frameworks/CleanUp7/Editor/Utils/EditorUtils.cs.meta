@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 9095e16513b065e439591d1b396c4268
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264629
+  packageName: Gaia for Unity 6
+  packageVersion: 4.2.5
+  assetPath: Assets/Procedural Worlds/Frameworks/CleanUp7/Editor/Utils/EditorUtils.cs
+  uploadId: 940642

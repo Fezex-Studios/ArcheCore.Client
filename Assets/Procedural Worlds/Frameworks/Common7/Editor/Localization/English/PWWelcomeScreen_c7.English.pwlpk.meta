@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 881b082772cfbb24794882461169fdbe
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264629
+  packageName: Gaia for Unity 6
+  packageVersion: 4.2.5
+  assetPath: Assets/Procedural Worlds/Frameworks/Common7/Editor/Localization/English/PWWelcomeScreen_c7.English.pwlpk
+  uploadId: 940642

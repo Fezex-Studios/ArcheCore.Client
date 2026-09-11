@@ -1,0 +1,10 @@
+﻿fileFormatVersion: 2
+guid: 1cf4402276344da6b750f79ea603f4f9
+timeCreated: 1697378615
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Scripts/Command/ConsoleTipElement.cs
+  uploadId: 636524

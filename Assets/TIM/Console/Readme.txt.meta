@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 39576999ad81cb643b014804274eeb2c
+timeCreated: 1533815770
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Readme.txt
+  uploadId: 636524

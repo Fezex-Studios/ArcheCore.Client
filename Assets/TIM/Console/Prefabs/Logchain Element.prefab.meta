@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: ba2faadd968d50e4599e159f3768d349
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Prefabs/Logchain Element.prefab
+  uploadId: 636524

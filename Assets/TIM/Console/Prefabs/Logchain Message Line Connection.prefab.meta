@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: f69426a7ef890de45bb3c4cac45dbdad
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Prefabs/Logchain Message Line Connection.prefab
+  uploadId: 636524

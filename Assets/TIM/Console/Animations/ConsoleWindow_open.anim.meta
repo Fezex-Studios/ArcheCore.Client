@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 00b1f3dc16817ce49a960dc5e44e0c6f
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 7400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Animations/ConsoleWindow_open.anim
+  uploadId: 636524

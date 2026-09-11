@@ -1,0 +1,10 @@
+﻿fileFormatVersion: 2
+guid: 5335b53e42f2497f99ebdc6f0f0a3011
+timeCreated: 1697229808
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Scripts/Command/CmdPartType.cs
+  uploadId: 636524

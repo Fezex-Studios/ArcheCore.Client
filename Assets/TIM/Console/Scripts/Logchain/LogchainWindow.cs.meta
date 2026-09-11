@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 2768a56d0fc73fc4e9384f9fe1cd177b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 267988
+  packageName: Runtime Modern Console
+  packageVersion: 1.0.1
+  assetPath: Assets/TIM/Console/Scripts/Logchain/LogchainWindow.cs
+  uploadId: 636524

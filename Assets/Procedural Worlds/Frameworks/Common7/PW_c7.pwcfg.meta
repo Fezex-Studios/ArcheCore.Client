@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 94b09b26848144e4ab0d2904b1e075dd
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264629
+  packageName: Gaia for Unity 6
+  packageVersion: 4.2.5
+  assetPath: Assets/Procedural Worlds/Frameworks/Common7/PW_c7.pwcfg
+  uploadId: 940642

@@ -1,6 +1,5 @@
 using ArcheCore.Client.UI;
 using ArcheCore.Client.UI.Interfaces;
-using Shared;
 using UnityEngine;
 
 namespace ArcheCore.Client.UI
@@ -11,7 +10,7 @@ namespace ArcheCore.Client.UI
         [SerializeField] private CharacterCreateUI  characterCreate;
         [SerializeField] private CharacterSelectUI  characterSelect;
 
-        private IUIScreen current;
+        private IUIPanel current;
 
         private void Awake()
         {
@@ -49,7 +48,7 @@ namespace ArcheCore.Client.UI
 
         private void HandleCharacterSpawned() => current?.Hide();
 
-        private void SwitchTo(IUIScreen next)
+        private void SwitchTo(IUIPanel next)
         {
             current?.Hide();
             current = next;

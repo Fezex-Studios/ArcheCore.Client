@@ -9,7 +9,7 @@ using UnityEngine.UI;
 
 namespace ArcheCore.Client.UI
 {
-    public class CharacterSelectUI : MonoBehaviour, IUIScreen
+    public class CharacterSelectUI : MonoBehaviour, IUIPanel
     {
         [SerializeField] private Transform        characterListContainer;
         [SerializeField] private CharacterSlotUI  slotPrefab;
@@ -23,6 +23,8 @@ namespace ArcheCore.Client.UI
         private CharacterSlotUI    _selectedSlot;
 
         public System.Action OnCreateNewRequested;
+
+        public bool IsVisible => gameObject.activeSelf;
 
         private void Awake()
         {
