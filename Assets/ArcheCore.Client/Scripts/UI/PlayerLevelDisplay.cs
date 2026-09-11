@@ -11,13 +11,13 @@ namespace ArcheCore.Client.UI
 
         private void OnEnable()
         {
-            PlayerUIEvents.OnLevelChanged += SetLevel;
+            PlayerStatEvents.OnLevelChanged += SetLevel;
             RequestLevel();
         }
 
         private void OnDisable()
         {
-            PlayerUIEvents.OnLevelChanged -= SetLevel;
+            PlayerStatEvents.OnLevelChanged -= SetLevel;
         }
 
         private void RequestLevel()

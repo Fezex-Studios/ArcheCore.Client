@@ -19,7 +19,7 @@ namespace ArcheCore.Client.Networking.W2C
             UnityEngine.Debug.Log(
                 $"[W2CCharacterList] Received {packet.Characters?.Length ?? 0} character(s)");
 
-            PlayerUIEvents.RaiseCharacterListReceived(
+            CharacterFlowEvents.RaiseCharacterListReceived(
                 packet.Characters ?? System.Array.Empty<CharacterSummary>());
         }
     }

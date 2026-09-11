@@ -3,11 +3,10 @@ using ArcheCore.Network.Shared.Packets.PersistenceServer.P2W;
 
 namespace ArcheCore.Client.UI
 {
-    public static class PlayerUIEvents
+    // Character-flow-only events: roster arriving, character chosen and
+    // spawned into the world. Subscribed to by LoginScreenManager.
+    public static class CharacterFlowEvents
     {
-        public static event Action<int> OnLevelChanged;
-        public static void RaiseLevelChanged(int level) => OnLevelChanged?.Invoke(level);
-
         public static event Action OnCharacterSpawned;
         public static void RaiseCharacterSpawned() => OnCharacterSpawned?.Invoke();
 

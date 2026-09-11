@@ -11,8 +11,7 @@ namespace ArcheCore.Client.Networking.W2C
         public void Handle(NetPacketReader reader)
         {
             var packet = MessagePackSerializer.Deserialize<W2CPlayerLevelResponsePacket>(reader.GetRemainingBytes());
-            PlayerUIEvents.RaiseLevelChanged(packet.Level);
-
+            PlayerStatEvents.RaiseLevelChanged(packet.Level);
         }
     }
 }

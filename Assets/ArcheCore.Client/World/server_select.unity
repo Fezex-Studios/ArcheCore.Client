@@ -3557,7 +3557,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c63e2193cc3c4adba02379becafcd89d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.Networking.ClientNetwork
-  editorToken: f5812521-60a9-48c4-9ddf-433f8b422a31
+  editorToken: 14cca998-bf12-4f74-b0f1-c9db2114a65f
 --- !u!4 &2015394151
 Transform:
   m_ObjectHideFlags: 0
