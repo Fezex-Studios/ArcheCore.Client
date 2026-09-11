@@ -1,8 +1,8 @@
 ﻿using UnityEngine;
 
-namespace ArcheCore.Client
+namespace ArcheCore.Client.World
 {
-    public class NetworkCels : MonoBehaviour
+    public class NetworkCells : MonoBehaviour
     {
         private const float CellSize = 50f;
         private const int RadiusCells = 1;

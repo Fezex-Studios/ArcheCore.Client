@@ -1,4 +1,4 @@
-﻿namespace Client.Scripts
+﻿namespace ArcheCore.Client
 {
     /// <summary>
     /// Holds session state for the currently authenticated client.

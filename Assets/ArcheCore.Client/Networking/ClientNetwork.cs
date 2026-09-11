@@ -3,7 +3,6 @@ using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
 using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Client;
-using Client.Scripts;
 using LiteNetLib;
 
 using UnityEngine;

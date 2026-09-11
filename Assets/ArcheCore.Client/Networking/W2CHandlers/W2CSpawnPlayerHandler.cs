@@ -24,7 +24,7 @@ namespace ArcheCore.Client.Networking.W2C
             if (packet.IsLocalPlayer)
             {
                 ClientNetwork.Instance.LocalNetworkId = packet.NetworkId;
-                PlayerUIEvents.RaiseCharacterSpawned();
+                CharacterFlowEvents.RaiseCharacterSpawned();
             }
 
             ClientNetwork.Instance.StartCoroutine(LoadWorldThenSpawn(packet));

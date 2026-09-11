@@ -1,5 +1,6 @@
 using ArcheCore.Client.UI;
 using ArcheCore.Client.UI.Interfaces;
+using ArcheCore.Network.Shared.Packets.PersistenceServer.P2W;
 using UnityEngine;
 
 namespace ArcheCore.Client.UI
@@ -14,16 +15,16 @@ namespace ArcheCore.Client.UI
 
         private void Awake()
         {
-            PlayerUIEvents.OnCharacterListReceived += HandleCharacterListReceived;
-            PlayerUIEvents.OnCharacterSpawned      += HandleCharacterSpawned;
+            CharacterFlowEvents.OnCharacterListReceived += HandleCharacterListReceived;
+            CharacterFlowEvents.OnCharacterSpawned      += HandleCharacterSpawned;
 
             characterSelect.OnCreateNewRequested += HandleCreateNewRequested;
         }
 
         private void OnDestroy()
         {
-            PlayerUIEvents.OnCharacterListReceived -= HandleCharacterListReceived;
-            PlayerUIEvents.OnCharacterSpawned      -= HandleCharacterSpawned;
+            CharacterFlowEvents.OnCharacterListReceived -= HandleCharacterListReceived;
+            CharacterFlowEvents.OnCharacterSpawned      -= HandleCharacterSpawned;
 
             characterSelect.OnCreateNewRequested -= HandleCreateNewRequested;
         }
@@ -31,7 +32,7 @@ namespace ArcheCore.Client.UI
         private void Start() => SwitchTo(serverSelect);
 
         private void HandleCharacterListReceived(
-            ArcheCore.Network.Shared.Packets.PersistenceServer.P2W.CharacterSummary[] characters)
+            CharacterSummary[] characters)
         {
             if (characters.Length == 0)
             {
