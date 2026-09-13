@@ -1,23 +1,17 @@
-﻿using SQLite;
-
-namespace ArcheCore.Client.GameData
+﻿namespace ArcheCore.Client.GameData
 {
-    [Table("items")]
+    /// <summary>
+    /// A single row of client-facing item data. Plain data class — no
+    /// SQLite attributes needed now that gamedata is loaded from the
+    /// custom binary format (see GameDataBinaryFormat.cs) straight into
+    /// memory rather than queried from a SQLite connection.
+    /// </summary>
     public class ItemRecord
     {
-        [PrimaryKey, Column("item_id")]
         public int ItemId { get; set; }
-
-        [Column("name")]
         public string Name { get; set; }
-
-        [Column("description")]
         public string Description { get; set; }
-
-        [Column("category")]
         public int Category { get; set; }
-
-        [Column("icon_name")]
         public string IconName { get; set; }
     }
 }

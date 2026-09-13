@@ -8,14 +8,20 @@ namespace ArcheCore.Client.GameData
 {
     /// <summary>
     /// Attach to a GameObject in the server_select scene.
-    /// Checks for a new gamedata.db on the auth server, downloads if outdated,
-    /// then opens the DB before the player connects to the world.
+    /// Checks for a new gamedata.bin on the auth server, downloads if
+    /// outdated, then loads it before the player connects to the world.
     ///
-    /// Note: gamedata.db is stored encrypted on disk (both the bundled
+    /// Note: gamedata.bin is stored encrypted on disk (both the bundled
     /// StreamingAssets copy and whatever the Authserver serves) — see
-    /// GameDataCrypto.cs / encrypt_gamedata.py. This class only ever moves
-    /// the encrypted bytes around; GameDataDatabase.Initialize() is what
-    /// decrypts it to a temp file right before opening the connection.
+    /// GameDataCrypto.cs / the Editor's "Export Binary + Encrypt" step.
+    /// This class only ever moves the encrypted bytes around;
+    /// GameDataDatabase.Initialize() is what decrypts and parses it right
+    /// before use.
+    ///
+    /// Only the file extension changed from the SQLite-backed version
+    /// (gamedata.db → gamedata.bin) — the version-check/download/fallback
+    /// flow below is otherwise identical, since none of it ever looked at
+    /// what was inside the file.
     /// </summary>
     public class GameDataBootstrap : MonoBehaviour
     {
@@ -28,11 +34,11 @@ namespace ArcheCore.Client.GameData
         private string GameDataDir => Path.Combine(
             Application.persistentDataPath, "GameData");
 
-        private string DbPath   => Path.Combine(GameDataDir, "gamedata.db");
+        private string DbPath   => Path.Combine(GameDataDir, "gamedata.bin");
         private string HashPath => Path.Combine(GameDataDir, "gamedata.hash");
 
         private string BundledDbPath => Path.Combine(
-            Application.streamingAssetsPath, "GameData", "gamedata.db");
+            Application.streamingAssetsPath, "GameData", "gamedata.bin");
 
         private async void Start()
         {
@@ -81,9 +87,6 @@ namespace ArcheCore.Client.GameData
                 Debug.Log("[GameDataBootstrap] Game data is up to date.");
             }
 
-            // Bug fix: previously GameDataDatabase.Initialize() ignored this
-            // resolved path entirely and re-opened StreamingAssets directly,
-            // so a freshly downloaded update was never actually loaded.
             GameDataDatabase.Initialize(DbPath);
             IsReady = GameDataDatabase.IsReady;
         }
@@ -118,9 +121,10 @@ namespace ArcheCore.Client.GameData
         private async Task DownloadDatabase(string newHash)
         {
             // Bytes here are the ENCRYPTED file as served by GameDataRoute —
-            // GameDataRoute itself needs no changes, it just streams whatever
-            // is on disk at GameDatabasePath on the server, which should be
-            // the output of encrypt_gamedata.py, not the raw plaintext db.
+            // GameDataRoute itself needs no format-aware changes, it just
+            // streams whatever is on disk at GameDatabasePath on the
+            // server, which should now be the output of the Editor's
+            // Export Binary + Encrypt step, not a raw SQLite file.
             byte[] data = await Http.GetByteArrayAsync(
                 $"{AuthServerUrl}/gamedata/db");
 
@@ -145,12 +149,12 @@ namespace ArcheCore.Client.GameData
             if (!File.Exists(BundledDbPath))
             {
                 Debug.LogWarning(
-                    "[GameDataBootstrap] No bundled gamedata.db in StreamingAssets/GameData/");
+                    "[GameDataBootstrap] No bundled gamedata.bin in StreamingAssets/GameData/");
                 return;
             }
 
             File.Copy(BundledDbPath, DbPath);
-            Debug.Log("[GameDataBootstrap] Copied bundled gamedata.db to persistent storage.");
+            Debug.Log("[GameDataBootstrap] Copied bundled gamedata.bin to persistent storage.");
         }
 
         private string ReadLocalHash()

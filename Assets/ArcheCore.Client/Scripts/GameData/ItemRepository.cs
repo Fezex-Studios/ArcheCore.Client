@@ -1,15 +1,17 @@
 ﻿using System.Collections.Generic;
-using SQLite;
+using System.Linq;
 using UnityEngine;
 
 namespace ArcheCore.Client.GameData
 {
     /// <summary>
-    /// All item lookups against gamedata.db.
+    /// All item lookups against the in-memory gamedata loaded by
+    /// GameDataDatabase. Same public API as before the SQLite → binary
+    /// migration, so callers elsewhere in the client don't need to change.
     /// </summary>
     public static class ItemRepository
     {
-        private static SQLiteConnection DB => GameDataDatabase.Connection;
+        private static IReadOnlyDictionary<int, ItemRecord> Items => GameDataDatabase.Items;
 
         // ── Single lookups ────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ namespace ArcheCore.Client.GameData
         {
             if (!Ready()) return null;
 
-            return DB.Find<ItemRecord>(itemId);
+            return Items.TryGetValue(itemId, out var item) ? item : null;
         }
 
         /// <summary>Returns the first item whose name matches exactly (case-insensitive).</summary>
@@ -26,9 +28,13 @@ namespace ArcheCore.Client.GameData
         {
             if (!Ready()) return null;
 
-            return DB.FindWithQuery<ItemRecord>(
-                "SELECT * FROM items WHERE name = ? COLLATE NOCASE LIMIT 1",
-                name);
+            foreach (var item in Items.Values)
+            {
+                if (string.Equals(item.Name, name, System.StringComparison.OrdinalIgnoreCase))
+                    return item;
+            }
+
+            return null;
         }
 
         // ── Collection lookups ────────────────────────────────────────────────
@@ -38,9 +44,10 @@ namespace ArcheCore.Client.GameData
         {
             if (!Ready()) return new List<ItemRecord>();
 
-            return DB.Query<ItemRecord>(
-                "SELECT * FROM items WHERE name LIKE ? COLLATE NOCASE",
-                $"%{term}%");
+            return Items.Values
+                .Where(i => i.Name != null &&
+                            i.Name.IndexOf(term, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
         }
 
         /// <summary>Returns all items in a given category.</summary>
@@ -48,9 +55,7 @@ namespace ArcheCore.Client.GameData
         {
             if (!Ready()) return new List<ItemRecord>();
 
-            return DB.Query<ItemRecord>(
-                "SELECT * FROM items WHERE category = ?",
-                category);
+            return Items.Values.Where(i => i.Category == category).ToList();
         }
 
         /// <summary>Returns every item in the database. Use sparingly.</summary>
@@ -58,7 +63,7 @@ namespace ArcheCore.Client.GameData
         {
             if (!Ready()) return new List<ItemRecord>();
 
-            return DB.Table<ItemRecord>().ToList();
+            return Items.Values.ToList();
         }
 
         // ── Helper ────────────────────────────────────────────────────────────
