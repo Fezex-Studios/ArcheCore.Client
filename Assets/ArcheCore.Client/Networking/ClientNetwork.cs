@@ -133,6 +133,7 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.ChatMessage, new W2CChatMessageHandler());
             
             dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
+            dispatcher.Register(Opcodes.PlayerSpawned, new W2CCharacterDataHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

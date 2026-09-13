@@ -1,5 +1,6 @@
 ﻿using ArchCore.Client;
 using ArcheCore.Client.Gameplay;
+using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.UI;
 using ArcheCore.Network.Client;
 using LiteNetLib;
@@ -53,7 +54,16 @@ namespace ArcheCore.Client.Networking.W2C
                     packet.IsLocalPlayer);
 
             if (packet.IsLocalPlayer && pc != null)
+            {
                 ClientNetwork.Instance.LocalPlayer = pc;
+
+                // Scene is loaded and the local player object exists —
+                // this is the actual "ready" moment, not "packet arrived."
+                // Any HUD element that needs initial character data reacts
+                // to PlayerStatEvents.OnCharacterDataChanged rather than
+                // requesting it itself.
+                C2WPlayerSpawnedPacketSender.Send(ClientNetwork.Instance.ServerPeer);
+            }
         }
     }
 }

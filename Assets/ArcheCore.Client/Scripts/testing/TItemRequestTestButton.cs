@@ -1,4 +1,5 @@
 ﻿using ArcheCore.Client.Networking;
+using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.C2WSenders;
 using UnityEngine;
 
@@ -18,6 +19,12 @@ namespace ArcheCore.Client.testing
             }
 
             C2WItemRequestDataPacketSender.Send(ClientNetwork.Instance.ServerPeer, testItemId);
+        }
+
+        public void OnLevelUpButtonClicked()
+        {
+            if (ClientNetwork.Instance?.ServerPeer == null) return;
+            C2WLevelUpPacketSender.Send(ClientNetwork.Instance.ServerPeer);
         }
         
     }

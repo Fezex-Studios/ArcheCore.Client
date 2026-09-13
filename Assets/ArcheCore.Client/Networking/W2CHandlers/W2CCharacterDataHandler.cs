@@ -7,12 +7,12 @@ using MessagePack;
 
 namespace ArcheCore.Client.Networking.W2C
 {
-    public class W2CPlayerlevelResponseHandler : IClientPacketHandler
+    public class W2CCharacterDataHandler : IClientPacketHandler
     {
         public void Handle(NetPacketReader reader)
         {
-            var packet = MessagePackSerializer.Deserialize<W2CPlayerLevelResponsePacket>(reader.GetRemainingBytes());
-            PlayerStatEvents.RaiseLevelChanged(packet.Level);
+            var data = MessagePackSerializer.Deserialize<CharacterData>(reader.GetRemainingBytes());
+            PlayerStatEvents.RaiseCharacterDataChanged(data);
         }
     }
 }
