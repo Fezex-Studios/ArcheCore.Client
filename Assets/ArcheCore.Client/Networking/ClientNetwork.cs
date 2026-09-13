@@ -131,6 +131,8 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CInteractLoot,      new W2CInteractLootHandler());
             dispatcher.Register(Opcodes.W2CInteractDenied,    new  W2CInteractDeniedHandler());
             dispatcher.Register(Opcodes.ChatMessage, new W2CChatMessageHandler());
+            
+            dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

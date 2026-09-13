@@ -2,6 +2,16 @@
 // Place this file in Assets/ArcheCore/Editor/
 // (namespace ArcheCore.Editor mirrors this folder structure)
 // Open via: ArcheCore → Dev Tools
+//
+// v1.2.0 changes:
+//  - Removed the AuthServer gamedata.bin path/auto-copy. The Game Data tab now
+//    only writes to StreamingAssets + a configurable "Encrypted DB Output Dir";
+//    copying that file onto the AuthServer is a manual, deliberate step.
+//  - Replaced the hardcoded "World DB" and "Client Data" tabs (which listed
+//    exactly two tables each via typed C# row classes) with a single generic
+//    "Database" tab that reads the schema at runtime (sqlite_master +
+//    PRAGMA table_info) and can browse/edit ANY table in either database,
+//    which is the only approach that scales once you have hundreds of tables.
 
 using System;
 using System.Collections.Generic;
@@ -9,6 +19,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using ArcheCore.Client.GameData;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -24,13 +35,21 @@ namespace ArcheCore.Editor
     {
         // Paths
         public string serverPatchDir   = "";
-        public string plaintextDbPath  = "";   // _oggamedata.db  (client-facing content package)
-        public string encryptedDbDir   = "";   // where to write gamedata.db copies
-        public string authServerDbPath = "";   // AuthServer/src/gamedata.db
+        public string plaintextDbPath  = "";   // _oggamedata.db (sqlite source; client-facing content, authored here)
+        public string encryptedDbDir   = "";   // where Export writes the encrypted gamedata.bin — copy this to
+                                                // AuthServer/src (or wherever it runs from) yourself when ready.
+        public string decryptedDbOutputDir = ""; // where "Decrypt StreamingAssets → Inspect" writes its output.
+                                                  // Deliberately separate from StreamingAssets, which should only
+                                                  // ever hold the encrypted copy — never a decrypted one.
         public string worldServerDbPath = "";  // WorldServer's LIVE runtime db (Data/worldserver.db)
                                                 // NOTE: this is a completely different file from
-                                                // plaintextDbPath above. NpcTemplates/NpcSpawners
-                                                // live here, not in the encrypted content package.
+                                                // plaintextDbPath above.
+
+        // Last-used state for the generic Database tab, so it doesn't forget
+        // what you were looking at between domain reloads.
+        public string lastDbTarget    = "ClientGameData";
+        public string lastCustomDbPath = "";
+        public string lastSelectedTable = "";
 
         public void Save() => Save(true);
     }
@@ -55,56 +74,226 @@ namespace ArcheCore.Editor
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  WorldServer DB rows (mirror ArcheCore.Server.World.GameData.Npcs classes,
-    //  which live in Data/worldserver.db via EF Core — NOT the encrypted
-    //  gamedata.db content package).
-    // ─────────────────────────────────────────────────────────────────────────
-    [Serializable]
-    [SQLite.Table("NpcTemplates")]
-    public class NpcTemplateRow
-    {
-        [SQLite.PrimaryKey] public int Id { get; set; }
-        public string Name          { get; set; } = string.Empty;
-        public int    Level         { get; set; }
-        public string ModelType     { get; set; } = string.Empty;
-        public float  InteractRange { get; set; } = 4f;
-
-        // Not a DB column — tracks whether this row exists yet, so Save
-        // knows whether to Insert or Update. NpcTemplates.Id is a
-        // deliberately hand-assigned design ID (not autoincrement), so
-        // new rows still need a value typed in before saving.
-        [SQLite.Ignore] public bool IsNew { get; set; }
-    }
-
-    [Serializable]
-    [SQLite.Table("NpcSpawners")]
-    public class NpcSpawnerRow
-    {
-        [SQLite.PrimaryKey, SQLite.AutoIncrement] public int Id { get; set; }
-        public int   TemplateId { get; set; }
-        public float X          { get; set; }
-        public float Y          { get; set; }
-        public float Z          { get; set; }
-        public int   Count      { get; set; } = 1;
-        public float Radius     { get; set; } = 1f;
-
-        [SQLite.Ignore] public bool IsNew { get; set; }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Client gamedata.db row (mirrors ArcheCore.Client.GameData.ItemRecord)
+    //  Client gamedata.db row — kept ONLY because the Game Data tab's export
+    //  pipeline needs a typed read of the `items` table to pack it into the
+    //  fixed binary format (GameDataBinaryFormat.WriteItems). This is business
+    //  logic tied to one specific known table, not a UI concern, so it's not
+    //  part of the "hundreds of tables" problem the generic browser solves.
     // ─────────────────────────────────────────────────────────────────────────
     [Serializable]
     [SQLite.Table("items")]
-    public class ItemDataRow
+    internal class ItemDataRow
     {
         [SQLite.PrimaryKey, SQLite.Column("item_id")] public int ItemId { get; set; }
         [SQLite.Column("name")]        public string Name        { get; set; } = string.Empty;
         [SQLite.Column("description")] public string Description { get; set; } = string.Empty;
         [SQLite.Column("category")]    public int    Category    { get; set; }
         [SQLite.Column("icon_name")]   public string IconName    { get; set; } = string.Empty;
+    }
 
-        [SQLite.Ignore] public bool IsNew { get; set; }
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Generic, schema-driven table access (the "Database" tab runs on this).
+    //  Reads (table list / column list / row page) use sqlite-net-pcl's
+    //  low-level SQLite3 stepping API because the column set is only known at
+    //  runtime. Writes (insert/update/delete) deliberately use the normal
+    //  public conn.Execute(...) API — the same one the rest of this file
+    //  already relies on — so the riskier "figure out the shape of unknown
+    //  data" code path never touches anything that mutates the database.
+    // ═════════════════════════════════════════════════════════════════════════
+    internal enum ColumnKind { Integer, Real, Text, Blob }
+
+    internal class ColumnSchema
+    {
+        public string Name;
+        public string DeclaredType;
+        public bool   IsPrimaryKey;
+        public bool   NotNull;
+        public ColumnKind Kind => DynamicSqlite.ClassifyType(DeclaredType);
+    }
+
+    internal class DynamicRow
+    {
+        // Canonical typed values (long / double / string / byte[] / null).
+        public Dictionary<string, object> Values   = new();
+        // Snapshot as loaded from disk — used to build WHERE clauses for
+        // UPDATE/DELETE (so editing the PK's on-screen value doesn't break
+        // the lookup) and to know if a row actually changed.
+        public Dictionary<string, object> Original = new();
+        // Per-cell text the user is actively editing; parsed back into
+        // Values on Save. Editing everything as text avoids a long tail of
+        // numeric-field edge cases (nulls, overflow, blobs) for a tool meant
+        // to work against an arbitrary, unknown schema.
+        public Dictionary<string, string> EditText  = new();
+        public bool IsNew;
+        public bool IsDirty;
+    }
+
+    internal static class DynamicSqlite
+    {
+        private static readonly IntPtr TransientHint = new IntPtr(-1);
+
+        public static ColumnKind ClassifyType(string declaredType)
+        {
+            if (string.IsNullOrEmpty(declaredType)) return ColumnKind.Text;
+            string t = declaredType.ToUpperInvariant();
+            if (t.Contains("INT")) return ColumnKind.Integer;
+            if (t.Contains("BLOB")) return ColumnKind.Blob;
+            if (t.Contains("REAL") || t.Contains("FLOA") || t.Contains("DOUB") ||
+                t.Contains("NUM")  || t.Contains("DEC"))
+                return ColumnKind.Real;
+            return ColumnKind.Text; // CHAR / CLOB / TEXT / unknown → text, matching SQLite's own affinity rules
+        }
+
+        public static List<string> GetTableNames(SQLite.SQLiteConnection conn)
+        {
+            var names = new List<string>();
+            dynamic stmt = SQLite.SQLite3.Prepare2(conn.Handle,
+                "SELECT name FROM sqlite_master WHERE type='table' " +
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name COLLATE NOCASE");
+            try
+            {
+                while (SQLite.SQLite3.Step(stmt) == SQLite.SQLite3.Result.Row)
+                    names.Add(SQLite.SQLite3.ColumnString(stmt, 0));
+            }
+            finally { SQLite.SQLite3.Finalize(stmt); }
+            return names;
+        }
+
+        public static List<ColumnSchema> GetSchema(SQLite.SQLiteConnection conn, string table)
+        {
+            var cols = new List<ColumnSchema>();
+            dynamic stmt = SQLite.SQLite3.Prepare2(conn.Handle,
+                $"PRAGMA table_info(\"{table}\")");
+            try
+            {
+                // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+                while (SQLite.SQLite3.Step(stmt) == SQLite.SQLite3.Result.Row)
+                {
+                    cols.Add(new ColumnSchema
+                    {
+                        Name         = SQLite.SQLite3.ColumnString(stmt, 1),
+                        DeclaredType = SQLite.SQLite3.ColumnString(stmt, 2) ?? "",
+                        NotNull      = SQLite.SQLite3.ColumnInt(stmt, 3) != 0,
+                        IsPrimaryKey = SQLite.SQLite3.ColumnInt(stmt, 5) != 0
+                    });
+                }
+            }
+            finally { SQLite.SQLite3.Finalize(stmt); }
+            return cols;
+        }
+
+        public static int GetRowCount(SQLite.SQLiteConnection conn, string table,
+                                       List<ColumnSchema> schema, string searchTerm)
+        {
+            if (string.IsNullOrEmpty(searchTerm))
+                return conn.ExecuteScalar<int>($"SELECT COUNT(*) FROM \"{table}\"");
+
+            string where = BuildSearchWhere(schema);
+            dynamic stmt = SQLite.SQLite3.Prepare2(conn.Handle,
+                $"SELECT COUNT(*) FROM \"{table}\" {where}");
+            try
+            {
+                BindSearchPattern(stmt, schema, searchTerm);
+                SQLite.SQLite3.Step(stmt);
+                return (int)SQLite.SQLite3.ColumnInt64(stmt, 0);
+            }
+            finally { SQLite.SQLite3.Finalize(stmt); }
+        }
+
+        public static List<DynamicRow> LoadRows(SQLite.SQLiteConnection conn, string table,
+                                                 List<ColumnSchema> schema, string searchTerm,
+                                                 int limit, int offset)
+        {
+            var rows = new List<DynamicRow>();
+            string colList = string.Join(", ", schema.Select(c => $"\"{c.Name}\""));
+            string where   = BuildSearchWhere(schema, searchTerm);
+            string sql     = $"SELECT {colList} FROM \"{table}\" {where} LIMIT {limit} OFFSET {offset}";
+
+            dynamic stmt = SQLite.SQLite3.Prepare2(conn.Handle, sql);
+            try
+            {
+                BindSearchPattern(stmt, schema, searchTerm);
+
+                while (SQLite.SQLite3.Step(stmt) == SQLite.SQLite3.Result.Row)
+                {
+                    var row = new DynamicRow();
+                    for (int i = 0; i < schema.Count; i++)
+                    {
+                        object val = ReadColumn(stmt, i);
+                        row.Values[schema[i].Name]   = val;
+                        row.Original[schema[i].Name] = val;
+                        row.EditText[schema[i].Name] = val?.ToString() ?? "";
+                    }
+                    rows.Add(row);
+                }
+            }
+            finally { SQLite.SQLite3.Finalize(stmt); }
+            return rows;
+        }
+
+        private static string BuildSearchWhere(List<ColumnSchema> schema, string searchTerm = null)
+        {
+            if (string.IsNullOrEmpty(searchTerm)) return "";
+            var clauses = schema.Select(c => $"CAST(\"{c.Name}\" AS TEXT) LIKE ?");
+            return "WHERE " + string.Join(" OR ", clauses);
+        }
+
+        private static void BindSearchPattern(dynamic stmt, List<ColumnSchema> schema, string searchTerm)
+        {
+            if (string.IsNullOrEmpty(searchTerm)) return;
+            string pattern = "%" + searchTerm + "%";
+            for (int i = 0; i < schema.Count; i++)
+                SQLite.SQLite3.BindText(stmt, i + 1, pattern, -1, TransientHint);
+        }
+
+        private static object ReadColumn(dynamic stmt, int index)
+        {
+            switch (SQLite.SQLite3.ColumnType(stmt, index))
+            {
+                case SQLite.SQLite3.ColType.Integer: return SQLite.SQLite3.ColumnInt64(stmt, index);
+                case SQLite.SQLite3.ColType.Float:   return SQLite.SQLite3.ColumnDouble(stmt, index);
+                case SQLite.SQLite3.ColType.Text:    return SQLite.SQLite3.ColumnString(stmt, index);
+                case SQLite.SQLite3.ColType.Blob:    return SQLite.SQLite3.ColumnByteArray(stmt, index);
+                default: return null;
+            }
+        }
+
+        // ── Writes: plain public conn.Execute — same API the rest of this file uses ──
+
+        public static void InsertRow(SQLite.SQLiteConnection conn, string table,
+                                      List<ColumnSchema> schema, DynamicRow row)
+        {
+            var cols = schema.Where(c => row.Values.ContainsKey(c.Name)).ToList();
+            string colList      = string.Join(", ", cols.Select(c => $"\"{c.Name}\""));
+            string placeholders = string.Join(", ", cols.Select(_ => "?"));
+            string sql = $"INSERT INTO \"{table}\" ({colList}) VALUES ({placeholders})";
+
+            object[] args = cols.Select(c => row.Values[c.Name]).ToArray();
+            conn.Execute(sql, args);
+
+            row.IsNew = false;
+            foreach (var kv in row.Values) row.Original[kv.Key] = kv.Value;
+        }
+
+        public static void UpdateRow(SQLite.SQLiteConnection conn, string table, ColumnSchema pk,
+                                      List<ColumnSchema> schema, DynamicRow row)
+        {
+            var updateCols = schema.Where(c => !c.IsPrimaryKey).ToList();
+            string setClause = string.Join(", ", updateCols.Select(c => $"\"{c.Name}\" = ?"));
+            string sql = $"UPDATE \"{table}\" SET {setClause} WHERE \"{pk.Name}\" = ?";
+
+            var args = updateCols.Select(c => row.Values[c.Name]).ToList();
+            args.Add(row.Original[pk.Name]);
+            conn.Execute(sql, args.ToArray());
+
+            foreach (var kv in row.Values) row.Original[kv.Key] = kv.Value;
+        }
+
+        public static void DeleteRow(SQLite.SQLiteConnection conn, string table,
+                                      ColumnSchema pk, DynamicRow row)
+        {
+            conn.Execute($"DELETE FROM \"{table}\" WHERE \"{pk.Name}\" = ?", row.Original[pk.Name]);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -113,7 +302,7 @@ namespace ArcheCore.Editor
     public class ArcheCoreDevTools : EditorWindow
     {
         // ── Tabs ─────────────────────────────────────────────────────────────
-        private enum Tab { GameData, SpawnMarkers, WorldDb, ClientData, Patches }
+        private enum Tab { GameData, SpawnMarkers, Database, Patches }
         private Tab _activeTab = Tab.GameData;
 
         // ── Shared log ───────────────────────────────────────────────────────
@@ -124,18 +313,25 @@ namespace ArcheCore.Editor
         private string  _npcPatchName   = "";
         private Vector2 _npcScroll;
 
-        // ── World DB tab state ────────────────────────────────────────────────
-        private List<NpcTemplateRow> _templates = new();
-        private List<NpcSpawnerRow>  _spawners  = new();
-        private Vector2 _templatesScroll;
-        private Vector2 _spawnersScroll;
-        private bool    _templatesDirty;
-        private bool    _spawnersDirty;
+        // ── Database tab state (generic, schema-driven) ──────────────────────
+        private enum DbTarget { ClientGameData, WorldServer, Custom }
+        private DbTarget _dbTarget = DbTarget.ClientGameData;
+        private string   _customDbPath = "";
 
-        // ── Client Data tab state ────────────────────────────────────────────
-        private List<ItemDataRow> _items = new();
-        private Vector2 _itemsScroll;
-        private bool    _itemsDirty;
+        private List<string> _allTables = new();
+        private string       _tableFilter = "";
+        private string       _selectedTable = null;
+
+        private List<ColumnSchema> _currentSchema = new();
+        private List<DynamicRow>   _currentRows   = new();
+        private string _rowSearch = "";
+        private int    _rowPage   = 0;
+        private const int PageSize = 50;
+        private int    _totalRowCount = 0;
+        private bool   _rowsDirty;
+
+        private Vector2 _dbTableListScroll;
+        private Vector2 _dbGridScroll;
 
         // ── Patch tab state ──────────────────────────────────────────────────
         private string  _customPatchName = "";
@@ -171,13 +367,18 @@ namespace ArcheCore.Editor
         public static void Open()
         {
             var w = GetWindow<ArcheCoreDevTools>("ArcheCore Dev Tools");
-            w.minSize = new Vector2(680, 640);
+            w.minSize = new Vector2(720, 660);
         }
 
         private void OnEnable()
         {
             RefreshPatches();
             AutoDetectPaths();
+
+            var s = ArcheCoreDevToolsSettings.instance;
+            Enum.TryParse(s.lastDbTarget, out _dbTarget);
+            _customDbPath  = s.lastCustomDbPath;
+            _selectedTable = string.IsNullOrEmpty(s.lastSelectedTable) ? null : s.lastSelectedTable;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -212,13 +413,11 @@ namespace ArcheCore.Editor
                 }
             }
 
-            if (string.IsNullOrEmpty(s.authServerDbPath))
+            if (string.IsNullOrEmpty(s.decryptedDbOutputDir) && !string.IsNullOrEmpty(s.plaintextDbPath))
             {
-                string candidateAuth = Path.Combine(
-                    root, "ArcheCore", "src", "ArcheCore.Server.Auth", "src");
-
-                if (Directory.Exists(candidateAuth))
-                    s.authServerDbPath = Path.Combine(candidateAuth, "gamedata.db");
+                string dbFolder = Path.GetDirectoryName(s.plaintextDbPath);
+                if (!string.IsNullOrEmpty(dbFolder))
+                    s.decryptedDbOutputDir = Path.Combine(dbFolder, "decrypted_db_output");
             }
 
             if (string.IsNullOrEmpty(s.worldServerDbPath))
@@ -305,8 +504,7 @@ namespace ArcheCore.Editor
             {
                 case Tab.GameData:     DrawGameDataTab();     break;
                 case Tab.SpawnMarkers: DrawSpawnMarkersTab(); break;
-                case Tab.WorldDb:      DrawWorldDbTab();      break;
-                case Tab.ClientData:   DrawClientDataTab();   break;
+                case Tab.Database:     DrawDatabaseTab();     break;
                 case Tab.Patches:      DrawPatchesTab();      break;
             }
 
@@ -327,7 +525,7 @@ namespace ArcheCore.Editor
 
             var versionRect = new Rect(rect.xMax - 80, rect.y + 10, 72, rect.height);
             GUI.color = new Color(0.5f, 0.5f, 0.5f);
-            EditorGUI.LabelField(versionRect, "v1.1.0", EditorStyles.miniLabel);
+            EditorGUI.LabelField(versionRect, "v1.2.0", EditorStyles.miniLabel);
             GUI.color = Color.white;
         }
 
@@ -340,9 +538,8 @@ namespace ArcheCore.Editor
 
             DrawTabButton(Tab.GameData,     "📦  Game Data");
             DrawTabButton(Tab.SpawnMarkers, "📍  Spawn Markers");
-            DrawTabButton(Tab.WorldDb,      "🗺  World DB");
-            DrawTabButton(Tab.ClientData,   "🎒  Client Data");
-            DrawTabButton(Tab.Patches,      "🗄  SQL Patches");
+            DrawTabButton(Tab.Database,     "🗄  Database");
+            DrawTabButton(Tab.Patches,      "🧩  SQL Patches");
 
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
@@ -358,9 +555,13 @@ namespace ArcheCore.Editor
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        //  TAB: GAME DATA  (encrypt/deploy pipeline for the client content
-        //  package — _oggamedata.db → gamedata.db, copied to StreamingAssets
-        //  and AuthServer. This is a DIFFERENT file from World DB below.)
+        //  TAB: GAME DATA  (export/encrypt pipeline for the client content
+        //  package — _oggamedata.db (sqlite, authored) is exported to the
+        //  custom binary format and encrypted as gamedata.bin, then copied to
+        //  StreamingAssets and to a local "encrypted output" folder. Getting
+        //  that file onto the AuthServer is now a manual step — copy it over
+        //  yourself once you're happy with a build, rather than this tool
+        //  reaching into the AuthServer's folder automatically.)
         // ═════════════════════════════════════════════════════════════════════
         private void DrawGameDataTab()
         {
@@ -373,10 +574,10 @@ namespace ArcheCore.Editor
             {
                 DrawPathField("Plaintext DB (_oggamedata.db)",
                     ref s.plaintextDbPath, false);
-                DrawPathField("Encrypted Output Dir",
+                DrawPathField("Encrypted DB Output Dir",
                     ref s.encryptedDbDir, true);
-                DrawPathField("AuthServer gamedata.db Path",
-                    ref s.authServerDbPath, false);
+                DrawPathField("Decrypted DB Output Dir",
+                    ref s.decryptedDbOutputDir, true);
             }
             catch (Exception e)
             {
@@ -389,12 +590,15 @@ namespace ArcheCore.Editor
             EditorGUILayout.LabelField("📊  Status", _subHeaderStyle);
             EditorGUILayout.Space(2);
 
-            DrawFileStatus("Plaintext DB",   s.plaintextDbPath);
-            DrawFileStatus("AuthServer DB",  s.authServerDbPath);
+            DrawFileStatus("Plaintext DB (source)", s.plaintextDbPath);
 
             string streamingDb = Path.Combine(
-                Application.streamingAssetsPath, "GameData", "gamedata.db");
-            DrawFileStatus("StreamingAssets DB", streamingDb);
+                Application.streamingAssetsPath, "GameData", "gamedata.bin");
+            DrawFileStatus("StreamingAssets .bin", streamingDb);
+
+            string devOutDb = string.IsNullOrEmpty(s.encryptedDbDir)
+                ? "" : Path.Combine(s.encryptedDbDir, "gamedata.bin");
+            DrawFileStatus("Encrypted output .bin", devOutDb);
 
             EditorGUILayout.EndVertical();
 
@@ -408,20 +612,30 @@ namespace ArcheCore.Editor
 
             EditorGUI.BeginDisabledGroup(!hasPlaintext || !hasOutputDir);
             if (DrawActionButton(
-                "Encrypt → StreamingAssets + AuthServer",
-                "AES-256 encrypts _oggamedata.db and copies to both destinations.",
+                "Export Binary + Encrypt → StreamingAssets + Output Dir",
+                "Reads the items table from _oggamedata.db, packs it into the " +
+                "custom binary format the client reads, AES-256 encrypts it, " +
+                "and writes the result to StreamingAssets and to the Encrypted " +
+                "DB Output Dir above. It does NOT touch the AuthServer — copy " +
+                "gamedata.bin over yourself once you're ready to deploy it.",
                 new Color(0.2f, 0.55f, 0.9f)))
             {
-                EncryptAndDeploy(s);
+                ExportEncryptAndDeploy(s);
             }
             EditorGUI.EndDisabledGroup();
 
             EditorGUILayout.Space(2);
 
-            EditorGUI.BeginDisabledGroup(!File.Exists(streamingDb));
+            EditorGUI.BeginDisabledGroup(!File.Exists(streamingDb) || string.IsNullOrEmpty(s.decryptedDbOutputDir));
             if (DrawActionButton(
-                "Decrypt StreamingAssets → Plaintext",
-                "Decrypts the current StreamingAssets copy back to _oggamedata.db for editing.",
+                "Decrypt StreamingAssets → Inspect (.bin)",
+                "Decrypts the current StreamingAssets .bin into the Decrypted DB " +
+                "Output Dir above, for debugging. StreamingAssets itself is left " +
+                "untouched — it should only ever hold the encrypted copy. This is " +
+                "the binary format, NOT sqlite — it can't be opened in DB Browser " +
+                "and won't overwrite _oggamedata.db, which remains the editable " +
+                "source of truth; re-run 'Export Binary + Encrypt' after making " +
+                "changes there.",
                 new Color(0.55f, 0.35f, 0.75f)))
             {
                 DecryptFromStreaming(s, streamingDb);
@@ -441,57 +655,97 @@ namespace ArcheCore.Editor
             }
             EditorGUI.EndDisabledGroup();
 
+            EditorGUILayout.Space(2);
+
+            EditorGUI.BeginDisabledGroup(!hasOutputDir || !Directory.Exists(s.encryptedDbDir));
+            if (DrawActionButton(
+                "Open Encrypted Output Folder",
+                "Opens the Encrypted DB Output Dir so you can copy gamedata.bin to the AuthServer.",
+                new Color(0.3f, 0.3f, 0.3f)))
+            {
+                EditorUtility.RevealInFinder(s.encryptedDbDir);
+            }
+            EditorGUI.EndDisabledGroup();
+
             EditorGUILayout.EndVertical();
 
             if (GUI.changed) s.Save();
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Encrypt + Deploy
+        //  Export Binary + Encrypt + Deploy
+        //
+        //  _oggamedata.db (sqlite, hand-edited via DB Browser or the Database
+        //  tab) is still the source of truth for content authoring. This step
+        //  reads its `items` table, packs it into the shared binary format
+        //  from GameDataBinaryFormat.cs (the same class the client runtime
+        //  uses to read it back), AES-encrypts that binary blob, and writes
+        //  it to StreamingAssets + the Encrypted DB Output Dir. Deploying to
+        //  the AuthServer is a manual copy from that output dir.
         // ─────────────────────────────────────────────────────────────────────
-        private void EncryptAndDeploy(ArcheCoreDevToolsSettings s)
+        private void ExportEncryptAndDeploy(ArcheCoreDevToolsSettings s)
         {
             try
             {
-                byte[] plaintext = File.ReadAllBytes(s.plaintextDbPath);
-                byte[] encrypted = EncryptAes(plaintext);
+                byte[] binary    = ExportItemsToBinary(s.plaintextDbPath);
+                byte[] encrypted = EncryptAes(binary);
 
                 string streamingDir = Path.Combine(
                     Application.streamingAssetsPath, "GameData");
                 Directory.CreateDirectory(streamingDir);
-                string streamingOut = Path.Combine(streamingDir, "gamedata.db");
+                string streamingOut = Path.Combine(streamingDir, "gamedata.bin");
                 File.WriteAllBytes(streamingOut, encrypted);
                 Log(LogLevel.Success,
-                    $"Written to StreamingAssets/GameData/gamedata.db ({encrypted.Length:N0} bytes)");
+                    $"Written to StreamingAssets/GameData/gamedata.bin ({encrypted.Length:N0} bytes)");
 
-                if (!string.IsNullOrEmpty(s.authServerDbPath))
-                {
-                    Directory.CreateDirectory(
-                        Path.GetDirectoryName(s.authServerDbPath)!);
-                    File.WriteAllBytes(s.authServerDbPath, encrypted);
-                    Log(LogLevel.Success,
-                        $"Written to AuthServer: {s.authServerDbPath}");
-                }
-                else
-                {
-                    Log(LogLevel.Warning,
-                        "AuthServer path not set — skipped AuthServer copy.");
-                }
-
-                if (!string.IsNullOrEmpty(s.encryptedDbDir))
-                {
-                    string devOut = Path.Combine(s.encryptedDbDir, "gamedata.db");
-                    File.WriteAllBytes(devOut, encrypted);
-                    Log(LogLevel.Success, $"Written to DevTools dir: {devOut}");
-                }
+                string devOut = Path.Combine(s.encryptedDbDir, "gamedata.bin");
+                File.WriteAllBytes(devOut, encrypted);
+                Log(LogLevel.Success, $"Written to Encrypted DB Output Dir: {devOut}");
+                Log(LogLevel.Info,
+                    "Reminder: this was NOT copied to the AuthServer. Copy " +
+                    $"{devOut} over manually when you're ready to deploy it.");
 
                 AssetDatabase.Refresh();
-                Log(LogLevel.Success, "✓ Encrypt + Deploy complete.");
+                Log(LogLevel.Success, "✓ Export + Encrypt complete.");
             }
             catch (Exception e)
             {
-                Log(LogLevel.Error, $"Encryption failed: {e.Message}");
+                Log(LogLevel.Error, $"Export/encryption failed: {e.Message}");
             }
+        }
+
+        /// <summary>
+        /// Reads the `items` table straight from the sqlite plaintext DB
+        /// (not from any in-editor cache, so this always reflects what's
+        /// actually saved on disk) and packs it via GameDataBinaryFormat.
+        /// </summary>
+        private byte[] ExportItemsToBinary(string plaintextDbPath)
+        {
+            List<ItemDataRow> rows;
+            using (var conn = new SQLite.SQLiteConnection(plaintextDbPath))
+            {
+                rows = conn.Table<ItemDataRow>().OrderBy(r => r.ItemId).ToList();
+            }
+
+            var records = rows.Select(r => new ItemRecord
+            {
+                ItemId      = r.ItemId,
+                Name        = r.Name,
+                Description = r.Description,
+                Category    = r.Category,
+                IconName    = r.IconName
+            }).ToList();
+
+            using var ms = new MemoryStream();
+            using (var writer = new BinaryWriter(ms))
+            {
+                GameDataBinaryFormat.WriteItems(writer, records);
+            }
+
+            Log(LogLevel.Info,
+                $"Packed {records.Count} item(s) into binary format v{GameDataBinaryFormat.CurrentVersion}.");
+
+            return ms.ToArray();
         }
 
         private void DecryptFromStreaming(ArcheCoreDevToolsSettings s,
@@ -501,15 +755,20 @@ namespace ArcheCore.Editor
             {
                 byte[] encrypted  = File.ReadAllBytes(streamingDb);
                 byte[] decrypted  = DecryptAes(encrypted);
-                string outputPath = s.plaintextDbPath;
 
-                if (string.IsNullOrEmpty(outputPath))
-                    outputPath = Path.Combine(
-                        Path.GetDirectoryName(streamingDb)!, "_oggamedata.db");
+                // Written to the dedicated Decrypted DB Output Dir for inspection
+                // only — deliberately NOT back into StreamingAssets (which should
+                // only ever hold the encrypted copy) and NOT to s.plaintextDbPath,
+                // since this is the packed binary format, not a valid sqlite file,
+                // and overwriting the real editable source with it would break it.
+                Directory.CreateDirectory(s.decryptedDbOutputDir);
+                string outputPath = Path.Combine(s.decryptedDbOutputDir, "gamedata.decrypted.bin");
 
                 File.WriteAllBytes(outputPath, decrypted);
                 Log(LogLevel.Success,
-                    $"✓ Decrypted to: {outputPath} ({decrypted.Length:N0} bytes)");
+                    $"✓ Decrypted to: {outputPath} ({decrypted.Length:N0} bytes). " +
+                    "This is the binary payload for inspection — _oggamedata.db " +
+                    "is unaffected.");
             }
             catch (Exception e)
             {
@@ -519,9 +778,9 @@ namespace ArcheCore.Editor
 
         // ═════════════════════════════════════════════════════════════════════
         //  TAB: SPAWN MARKERS  (place NPCs in-scene, export as a .sql patch —
-        //  a separate workflow from the direct World DB editing below; useful
-        //  when you want to visually place several spawners at once before
-        //  committing anything to the live DB.)
+        //  a separate workflow from editing NpcSpawners directly on the
+        //  Database tab; useful when you want to visually place several
+        //  spawners at once before committing anything to the live DB.)
         // ═════════════════════════════════════════════════════════════════════
         private void DrawSpawnMarkersTab()
         {
@@ -762,606 +1021,373 @@ namespace ArcheCore.Editor
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        //  TAB: WORLD DB  (direct editing of Data/worldserver.db — the LIVE
-        //  database WorldServer actually reads at runtime via EF Core.
-        //  NpcTemplates and NpcSpawners both live here.)
+        //  TAB: DATABASE  (generic — works against ANY table in either the
+        //  client plaintext DB or the WorldServer DB, or an arbitrary custom
+        //  .db path. Table list and columns are read from the schema at
+        //  runtime, so nothing here needs updating as tables are added.)
         // ═════════════════════════════════════════════════════════════════════
-        private void DrawWorldDbTab()
+        private void DrawDatabaseTab()
         {
             var s = ArcheCoreDevToolsSettings.instance;
 
             EditorGUILayout.BeginVertical(_sectionBoxStyle);
-            EditorGUILayout.LabelField("📁  Source", _subHeaderStyle);
+            EditorGUILayout.LabelField("🎯  Target Database", _subHeaderStyle);
             EditorGUILayout.Space(4);
-            try
+
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.BeginHorizontal();
+            DrawDbTargetButton(DbTarget.ClientGameData, "Client DB");
+            DrawDbTargetButton(DbTarget.WorldServer,    "WorldServer DB");
+            DrawDbTargetButton(DbTarget.Custom,         "Custom Path…");
+            EditorGUILayout.EndHorizontal();
+
+            switch (_dbTarget)
             {
-                DrawPathField("WorldServer DB (worldserver.db)",
-                    ref s.worldServerDbPath, false);
-            }
-            catch (Exception e)
-            {
-                EditorGUILayout.HelpBox($"Path error: {e.Message}", MessageType.Error);
+                case DbTarget.ClientGameData:
+                    DrawPathField("Client DB Path", ref s.plaintextDbPath, false);
+                    break;
+                case DbTarget.WorldServer:
+                    DrawPathField("WorldServer DB Path", ref s.worldServerDbPath, false);
+                    break;
+                case DbTarget.Custom:
+                    DrawPathField("Custom DB Path", ref _customDbPath, false);
+                    break;
             }
 
-            bool hasDb = File.Exists(s.worldServerDbPath);
+            if (EditorGUI.EndChangeCheck())
+            {
+                ConfirmDiscardIfDirtyThen(() =>
+                {
+                    _allTables.Clear();
+                    _selectedTable = null;
+                    _currentSchema.Clear();
+                    _currentRows.Clear();
+                });
+            }
+
+            string activeDbPath = ResolveActiveDbPath();
+            bool hasDb = !string.IsNullOrEmpty(activeDbPath) && File.Exists(activeDbPath);
+
+            EditorGUILayout.Space(2);
             if (!hasDb)
             {
                 DrawHelpBox(
-                    "worldserver.db not found. This is the live file WorldServer " +
-                    "reads at runtime (Database:WorldDb in appsettings.json) — " +
-                    "different from _oggamedata.db on the Game Data tab.",
+                    string.IsNullOrEmpty(activeDbPath)
+                        ? "No path set for this target yet."
+                        : $"File not found: {activeDbPath}",
                     MessageType.Warning);
             }
-
-            DrawHelpBox(
-                "Stop the WorldServer before editing — it holds this file open " +
-                "and won't pick up changes until restarted anyway.",
-                MessageType.Info);
-
+            else
+            {
+                EditorGUILayout.LabelField($"Connected: {activeDbPath}", EditorStyles.miniLabel);
+            }
             EditorGUILayout.EndVertical();
 
-            DrawTemplatesSection(s.worldServerDbPath, hasDb);
-            DrawSpawnersSection(s.worldServerDbPath, hasDb);
-
-            if (GUI.changed) s.Save();
-        }
-
-        private void DrawTemplatesSection(string dbPath, bool hasDb)
-        {
+            // ── Table list ───────────────────────────────────────────────────
             EditorGUILayout.BeginVertical(_sectionBoxStyle);
-
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField(
-                $"🐗  NpcTemplates  ({_templates.Count})", _subHeaderStyle,
-                GUILayout.ExpandWidth(true));
+                $"📋  Tables  ({_allTables.Count})", _subHeaderStyle, GUILayout.ExpandWidth(true));
 
             EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("Load", GUILayout.Width(70)))
-                LoadTemplates(dbPath);
+            if (GUILayout.Button("Load Tables", GUILayout.Width(90)))
+                LoadTableList(activeDbPath);
             EditorGUI.EndDisabledGroup();
-
-            EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("+ Add", GUILayout.Width(60)))
-                AddNewTemplate();
-            EditorGUI.EndDisabledGroup();
-
-            EditorGUI.BeginDisabledGroup(!_templatesDirty);
-            GUI.color = new Color(0.4f, 0.9f, 0.4f);
-            if (GUILayout.Button("Save", GUILayout.Width(70)))
-                SaveTemplates(dbPath);
-            GUI.color = Color.white;
-            EditorGUI.EndDisabledGroup();
-
             EditorGUILayout.EndHorizontal();
-            EditorGUILayout.Space(4);
 
-            if (_templatesDirty)
-                DrawHelpBox("Unsaved template changes.", MessageType.Warning);
-
-            if (_templates.Count == 0)
+            if (_allTables.Count > 0)
             {
-                DrawHelpBox("No templates loaded. Click Load.", MessageType.Info);
-            }
-            else
-            {
-                DrawTemplateTableHeader();
+                EditorGUILayout.Space(2);
+                _tableFilter = EditorGUILayout.TextField("Filter", _tableFilter);
 
-                _templatesScroll = EditorGUILayout.BeginScrollView(
-                    _templatesScroll, GUILayout.MaxHeight(220));
+                var filtered = string.IsNullOrEmpty(_tableFilter)
+                    ? _allTables
+                    : _allTables.Where(t => t.IndexOf(_tableFilter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
 
-                NpcTemplateRow toDelete = null;
-                foreach (var t in _templates)
+                _dbTableListScroll = EditorGUILayout.BeginScrollView(
+                    _dbTableListScroll, GUILayout.MaxHeight(120));
+
+                foreach (var table in filtered)
                 {
-                    if (DrawTemplateRow(t))
-                        toDelete = t;
+                    bool selected = table == _selectedTable;
+                    GUI.color = selected ? new Color(0.95f, 0.85f, 0.4f) : Color.white;
+                    if (GUILayout.Button(table, EditorStyles.miniButton))
+                    {
+                        string chosen = table;
+                        ConfirmDiscardIfDirtyThen(() => SelectTable(activeDbPath, chosen));
+                    }
                 }
-
-                if (toDelete != null)
-                {
-                    if (!toDelete.IsNew)
-                        DeleteTemplate(dbPath, toDelete);
-                    _templates.Remove(toDelete);
-                }
+                GUI.color = Color.white;
 
                 EditorGUILayout.EndScrollView();
-            }
 
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawSpawnersSection(string dbPath, bool hasDb)
-        {
-            EditorGUILayout.BeginVertical(_sectionBoxStyle);
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField(
-                $"📍  NpcSpawners  ({_spawners.Count})", _subHeaderStyle,
-                GUILayout.ExpandWidth(true));
-
-            EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("Load", GUILayout.Width(70)))
-                LoadSpawners(dbPath);
-            EditorGUI.EndDisabledGroup();
-
-            EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("+ Add", GUILayout.Width(60)))
-                AddNewSpawner();
-            EditorGUI.EndDisabledGroup();
-
-            EditorGUI.BeginDisabledGroup(!_spawnersDirty);
-            GUI.color = new Color(0.4f, 0.9f, 0.4f);
-            if (GUILayout.Button("Save", GUILayout.Width(70)))
-                SaveSpawners(dbPath);
-            GUI.color = Color.white;
-            EditorGUI.EndDisabledGroup();
-
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.Space(4);
-
-            if (_spawnersDirty)
-                DrawHelpBox("Unsaved spawner changes.", MessageType.Warning);
-
-            var knownTemplateIds = _templates.Select(t => t.Id).ToHashSet();
-            bool templatesLoaded = _templates.Count > 0;
-
-            if (_spawners.Count == 0)
-            {
-                DrawHelpBox("No spawners loaded. Click Load.", MessageType.Info);
+                if (filtered.Count == 0)
+                    DrawHelpBox("No tables match that filter.", MessageType.Info);
             }
             else
             {
-                DrawSpawnerTableHeader();
-
-                _spawnersScroll = EditorGUILayout.BeginScrollView(
-                    _spawnersScroll, GUILayout.MaxHeight(220));
-
-                NpcSpawnerRow toDelete = null;
-                foreach (var sp in _spawners)
-                {
-                    bool unknownTemplate = templatesLoaded &&
-                                           !knownTemplateIds.Contains(sp.TemplateId);
-                    if (DrawSpawnerRow(sp, unknownTemplate))
-                        toDelete = sp;
-                }
-
-                if (toDelete != null)
-                {
-                    if (!toDelete.IsNew)
-                        DeleteSpawner(dbPath, toDelete);
-                    _spawners.Remove(toDelete);
-                }
-
-                EditorGUILayout.EndScrollView();
+                DrawHelpBox(hasDb
+                    ? "Click 'Load Tables' to read the schema."
+                    : "Set a valid database path above first.", MessageType.Info);
             }
-
-            if (!templatesLoaded)
-                DrawHelpBox(
-                    "Load NpcTemplates above too, to catch spawners pointing at a " +
-                    "TemplateId that doesn't exist.",
-                    MessageType.Info);
-
             EditorGUILayout.EndVertical();
-        }
 
-        private void DrawTemplateTableHeader()
-        {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Id",            EditorStyles.miniLabel, GUILayout.Width(30));
-            GUILayout.Label("Name",          EditorStyles.miniLabel, GUILayout.Width(130));
-            GUILayout.Label("Level",         EditorStyles.miniLabel, GUILayout.Width(45));
-            GUILayout.Label("ModelType",     EditorStyles.miniLabel, GUILayout.Width(100));
-            GUILayout.Label("InteractRange", EditorStyles.miniLabel, GUILayout.Width(85));
-            GUILayout.Label("",              EditorStyles.miniLabel, GUILayout.Width(24));
-            EditorGUILayout.EndHorizontal();
+            // ── Row grid ─────────────────────────────────────────────────────
+            if (_selectedTable != null)
+                DrawTableGrid(activeDbPath);
 
-            var rect = GUILayoutUtility.GetLastRect();
-            EditorGUI.DrawRect(
-                new Rect(rect.x, rect.yMax, rect.width, 1),
-                new Color(0.4f, 0.4f, 0.4f));
-            EditorGUILayout.Space(2);
-        }
-
-        /// <returns>true if the row's delete button was clicked</returns>
-        private bool DrawTemplateRow(NpcTemplateRow t)
-        {
-            EditorGUI.BeginChangeCheck();
-
-            EditorGUILayout.BeginHorizontal();
-
-            if (t.IsNew)
-                t.Id = EditorGUILayout.IntField(t.Id, GUILayout.Width(30));
-            else
-                GUILayout.Label(t.Id.ToString(), EditorStyles.miniLabel, GUILayout.Width(30));
-
-            t.Name          = EditorGUILayout.TextField(t.Name, GUILayout.Width(130));
-            t.Level         = EditorGUILayout.IntField(t.Level, GUILayout.Width(45));
-            t.ModelType     = EditorGUILayout.TextField(t.ModelType, GUILayout.Width(100));
-            t.InteractRange = EditorGUILayout.FloatField(t.InteractRange, GUILayout.Width(85));
-
-            bool delete = GUILayout.Button("✕", EditorStyles.miniButton, GUILayout.Width(24));
-
-            EditorGUILayout.EndHorizontal();
-
-            if (t.IsNew)
+            if (GUI.changed)
             {
-                GUI.color = new Color(0.95f, 0.75f, 0.2f);
-                EditorGUILayout.LabelField("  new — not saved yet", EditorStyles.miniLabel);
-                GUI.color = Color.white;
+                s.lastDbTarget      = _dbTarget.ToString();
+                s.lastCustomDbPath  = _customDbPath;
+                s.lastSelectedTable = _selectedTable ?? "";
+                s.Save();
             }
-
-            if (EditorGUI.EndChangeCheck())
-                _templatesDirty = true;
-
-            return delete;
         }
 
-        private void DrawSpawnerTableHeader()
+        private void DrawDbTargetButton(DbTarget target, string label)
         {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Id",         EditorStyles.miniLabel, GUILayout.Width(30));
-            GUILayout.Label("TemplateId", EditorStyles.miniLabel, GUILayout.Width(70));
-            GUILayout.Label("X",          EditorStyles.miniLabel, GUILayout.Width(55));
-            GUILayout.Label("Y",          EditorStyles.miniLabel, GUILayout.Width(55));
-            GUILayout.Label("Z",          EditorStyles.miniLabel, GUILayout.Width(55));
-            GUILayout.Label("Count",      EditorStyles.miniLabel, GUILayout.Width(45));
-            GUILayout.Label("Radius",     EditorStyles.miniLabel, GUILayout.Width(50));
-            GUILayout.Label("",           EditorStyles.miniLabel, GUILayout.Width(24));
-            EditorGUILayout.EndHorizontal();
-
-            var rect = GUILayoutUtility.GetLastRect();
-            EditorGUI.DrawRect(
-                new Rect(rect.x, rect.yMax, rect.width, 1),
-                new Color(0.4f, 0.4f, 0.4f));
-            EditorGUILayout.Space(2);
-        }
-
-        /// <returns>true if the row's delete button was clicked</returns>
-        private bool DrawSpawnerRow(NpcSpawnerRow sp, bool unknownTemplate)
-        {
-            EditorGUI.BeginChangeCheck();
-
-            EditorGUILayout.BeginHorizontal();
-
-            string idLabel = sp.IsNew ? "new" : sp.Id.ToString();
-            GUILayout.Label(idLabel, EditorStyles.miniLabel, GUILayout.Width(30));
-
-            if (unknownTemplate) GUI.color = new Color(1f, 0.5f, 0.5f);
-            sp.TemplateId = EditorGUILayout.IntField(sp.TemplateId, GUILayout.Width(70));
+            bool active = _dbTarget == target;
+            GUI.color = active ? new Color(0.95f, 0.85f, 0.4f) : Color.white;
+            if (GUILayout.Button(label, EditorStyles.miniButton))
+                _dbTarget = target;
             GUI.color = Color.white;
-
-            sp.X      = EditorGUILayout.FloatField(sp.X, GUILayout.Width(55));
-            sp.Y      = EditorGUILayout.FloatField(sp.Y, GUILayout.Width(55));
-            sp.Z      = EditorGUILayout.FloatField(sp.Z, GUILayout.Width(55));
-            sp.Count  = EditorGUILayout.IntField(sp.Count, GUILayout.Width(45));
-            sp.Radius = EditorGUILayout.FloatField(sp.Radius, GUILayout.Width(50));
-
-            bool delete = GUILayout.Button("✕", EditorStyles.miniButton, GUILayout.Width(24));
-
-            EditorGUILayout.EndHorizontal();
-
-            if (unknownTemplate)
-            {
-                GUI.color = new Color(1f, 0.5f, 0.5f);
-                EditorGUILayout.LabelField(
-                    $"  ⚠ TemplateId {sp.TemplateId} not found in loaded NpcTemplates",
-                    EditorStyles.miniLabel);
-                GUI.color = Color.white;
-            }
-            else if (sp.IsNew)
-            {
-                GUI.color = new Color(0.95f, 0.75f, 0.2f);
-                EditorGUILayout.LabelField("  new — not saved yet", EditorStyles.miniLabel);
-                GUI.color = Color.white;
-            }
-
-            if (EditorGUI.EndChangeCheck())
-                _spawnersDirty = true;
-
-            return delete;
         }
 
-        private void AddNewTemplate()
-        {
-            int nextId = _templates.Count > 0 ? _templates.Max(t => t.Id) + 1 : 1;
-            _templates.Add(new NpcTemplateRow
-            {
-                Id            = nextId,
-                Name          = "New NPC",
-                Level         = 1,
-                ModelType     = "",
-                InteractRange = 4f,
-                IsNew         = true
-            });
-            _templatesDirty = true;
-            Log(LogLevel.Info, $"Added new template row (Id {nextId} — edit before saving).");
-        }
-
-        private void AddNewSpawner()
-        {
-            _spawners.Add(new NpcSpawnerRow
-            {
-                Id         = 0,
-                TemplateId = _templates.Count > 0 ? _templates[0].Id : 0,
-                X = 0, Y = 0, Z = 0,
-                Count  = 1,
-                Radius = 1f,
-                IsNew  = true
-            });
-            _spawnersDirty = true;
-            Log(LogLevel.Info, "Added new spawner row — set TemplateId and position, then Save.");
-        }
-
-        private void LoadTemplates(string dbPath)
-        {
-            try
-            {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    _templates = conn.Table<NpcTemplateRow>().OrderBy(r => r.Id).ToList();
-                }
-                _templatesDirty = false;
-                Log(LogLevel.Success, $"Loaded {_templates.Count} NPC template(s).");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Failed to load templates: {e.Message}");
-            }
-        }
-
-        private void SaveTemplates(string dbPath)
-        {
-            try
-            {
-                var templatesSnapshot = _templates;
-
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    conn.RunInTransaction(() =>
-                    {
-                        foreach (var t in templatesSnapshot)
-                        {
-                            if (t.IsNew)
-                            {
-                                conn.Insert(t);
-                                t.IsNew = false;
-                            }
-                            else
-                            {
-                                conn.Update(t);
-                            }
-                        }
-                    });
-                }
-
-                _templatesDirty = false;
-                Log(LogLevel.Success,
-                    $"✓ Saved {_templates.Count} template(s) to {Path.GetFileName(dbPath)}.");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Save failed: {e.Message}");
-            }
-        }
-
-        private void DeleteTemplate(string dbPath, NpcTemplateRow t)
-        {
-            try
-            {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    conn.Delete(t);
-                }
-                Log(LogLevel.Success, $"✓ Deleted template Id {t.Id}.");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Delete failed: {e.Message}");
-            }
-        }
-
-        private void LoadSpawners(string dbPath)
-        {
-            try
-            {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    _spawners = conn.Table<NpcSpawnerRow>().OrderBy(r => r.Id).ToList();
-                }
-                _spawnersDirty = false;
-                Log(LogLevel.Success, $"Loaded {_spawners.Count} NPC spawner(s).");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Failed to load spawners: {e.Message}");
-            }
-        }
-
-        private void SaveSpawners(string dbPath)
-        {
-            try
-            {
-                var spawnersSnapshot = _spawners;
-
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    conn.RunInTransaction(() =>
-                    {
-                        foreach (var sp in spawnersSnapshot)
-                        {
-                            if (sp.IsNew)
-                            {
-                                conn.Insert(sp); // AutoIncrement fills sp.Id here
-                                sp.IsNew = false;
-                            }
-                            else
-                            {
-                                conn.Update(sp);
-                            }
-                        }
-                    });
-                }
-
-                _spawnersDirty = false;
-                Log(LogLevel.Success,
-                    $"✓ Saved {_spawners.Count} spawner(s) to {Path.GetFileName(dbPath)}.");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Save failed: {e.Message}");
-            }
-        }
-
-        private void DeleteSpawner(string dbPath, NpcSpawnerRow sp)
-        {
-            try
-            {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    conn.Delete(sp);
-                }
-                Log(LogLevel.Success, $"✓ Deleted spawner Id {sp.Id}.");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Delete failed: {e.Message}");
-            }
-        }
-
-        // ═════════════════════════════════════════════════════════════════════
-        //  TAB: CLIENT DATA  (edits the `items` table inside _oggamedata.db —
-        //  the same plaintext file the Game Data tab encrypts/deploys. Editing
-        //  here does NOT touch worldserver.db.)
-        // ═════════════════════════════════════════════════════════════════════
-        private void DrawClientDataTab()
+        private string ResolveActiveDbPath()
         {
             var s = ArcheCoreDevToolsSettings.instance;
-            bool hasDb = File.Exists(s.plaintextDbPath);
-
-            EditorGUILayout.BeginVertical(_sectionBoxStyle);
-            EditorGUILayout.LabelField("📁  Source", _subHeaderStyle);
-            EditorGUILayout.Space(4);
-
-            if (!hasDb)
+            return _dbTarget switch
             {
-                DrawHelpBox(
-                    "No plaintext DB found. Set the path on the Game Data tab, " +
-                    "or use 'Decrypt StreamingAssets → Plaintext' there first.",
-                    MessageType.Warning);
-            }
-            else
+                DbTarget.ClientGameData => s.plaintextDbPath,
+                DbTarget.WorldServer    => s.worldServerDbPath,
+                DbTarget.Custom         => _customDbPath,
+                _                       => null
+            };
+        }
+
+        private void ConfirmDiscardIfDirtyThen(Action action)
+        {
+            if (_rowsDirty)
             {
-                EditorGUILayout.LabelField(
-                    $"Editing: {s.plaintextDbPath}", EditorStyles.miniLabel);
+                bool discard = EditorUtility.DisplayDialog(
+                    "Discard unsaved changes?",
+                    $"'{_selectedTable}' has unsaved edits. Switching now will discard them.",
+                    "Discard", "Cancel");
+                if (!discard) return;
             }
+            _rowsDirty = false;
+            action();
+        }
 
-            DrawHelpBox(
-                "After saving, run 'Encrypt → StreamingAssets + AuthServer' on the " +
-                "Game Data tab to push this to where the client/AuthServer actually read it.",
-                MessageType.Info);
+        private void LoadTableList(string dbPath)
+        {
+            try
+            {
+                using var conn = new SQLite.SQLiteConnection(dbPath);
+                _allTables = DynamicSqlite.GetTableNames(conn);
+                Log(LogLevel.Success, $"Found {_allTables.Count} table(s) in {Path.GetFileName(dbPath)}.");
+            }
+            catch (Exception e)
+            {
+                Log(LogLevel.Error, $"Failed to read schema: {e.Message}");
+            }
+        }
 
-            EditorGUILayout.EndVertical();
+        private void SelectTable(string dbPath, string table)
+        {
+            _selectedTable = table;
+            _rowPage       = 0;
+            _rowSearch     = "";
+            LoadTableSchemaAndRows(dbPath);
+        }
+
+        private void LoadTableSchemaAndRows(string dbPath)
+        {
+            try
+            {
+                using var conn = new SQLite.SQLiteConnection(dbPath);
+                _currentSchema = DynamicSqlite.GetSchema(conn, _selectedTable);
+
+                if (_currentSchema.Count == 0)
+                {
+                    Log(LogLevel.Warning, $"'{_selectedTable}' has no columns (or doesn't exist).");
+                    _currentRows.Clear();
+                    return;
+                }
+
+                if (!_currentSchema.Any(c => c.IsPrimaryKey))
+                    Log(LogLevel.Warning,
+                        $"'{_selectedTable}' has no single-column PRIMARY KEY — existing rows can be " +
+                        "viewed but not edited safely here. New rows can still be inserted.");
+
+                _totalRowCount = DynamicSqlite.GetRowCount(conn, _selectedTable, _currentSchema, _rowSearch);
+                _currentRows   = DynamicSqlite.LoadRows(conn, _selectedTable, _currentSchema,
+                                                         _rowSearch, PageSize, _rowPage * PageSize);
+                _rowsDirty = false;
+
+                Log(LogLevel.Success,
+                    $"Loaded {_currentRows.Count} of {_totalRowCount} row(s) from '{_selectedTable}'.");
+            }
+            catch (Exception e)
+            {
+                Log(LogLevel.Error, $"Failed to load '{_selectedTable}': {e.Message}");
+            }
+        }
+
+        private void DrawTableGrid(string dbPath)
+        {
+            var pk = _currentSchema.FirstOrDefault(c => c.IsPrimaryKey);
 
             EditorGUILayout.BeginVertical(_sectionBoxStyle);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField(
-                $"🎒  Items  ({_items.Count})", _subHeaderStyle,
-                GUILayout.ExpandWidth(true));
+                $"🧾  {_selectedTable}  ({_currentRows.Count} of {_totalRowCount})",
+                _subHeaderStyle, GUILayout.ExpandWidth(true));
 
-            EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("Load", GUILayout.Width(70)))
-                LoadItems(s.plaintextDbPath);
-            EditorGUI.EndDisabledGroup();
+            if (GUILayout.Button("+ Add Row", GUILayout.Width(80)))
+                AddNewRow();
 
-            EditorGUI.BeginDisabledGroup(!hasDb);
-            if (GUILayout.Button("+ Add", GUILayout.Width(60)))
-                AddNewItem();
-            EditorGUI.EndDisabledGroup();
-
-            EditorGUI.BeginDisabledGroup(!_itemsDirty);
+            EditorGUI.BeginDisabledGroup(!_rowsDirty);
             GUI.color = new Color(0.4f, 0.9f, 0.4f);
-            if (GUILayout.Button("Save", GUILayout.Width(70)))
-                SaveItems(s.plaintextDbPath);
+            if (GUILayout.Button("Save Changes", GUILayout.Width(100)))
+                SaveTableChanges(dbPath, pk);
             GUI.color = Color.white;
             EditorGUI.EndDisabledGroup();
 
+            if (GUILayout.Button("Reload", GUILayout.Width(70)))
+                ConfirmDiscardIfDirtyThen(() => LoadTableSchemaAndRows(dbPath));
+
             EditorGUILayout.EndHorizontal();
-            EditorGUILayout.Space(4);
 
-            if (_itemsDirty)
-                DrawHelpBox("Unsaved item changes.", MessageType.Warning);
-
-            if (_items.Count == 0)
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Search", GUILayout.Width(50));
+            string newSearch = EditorGUILayout.TextField(_rowSearch);
+            if (GUILayout.Button("Go", GUILayout.Width(30)) || newSearch != _rowSearch)
             {
-                DrawHelpBox("No items loaded. Click Load.", MessageType.Info);
+                _rowSearch = newSearch;
+                _rowPage   = 0;
+                LoadTableSchemaAndRows(dbPath);
             }
-            else
+            EditorGUILayout.EndHorizontal();
+
+            if (_rowsDirty)
+                DrawHelpBox("Unsaved changes in this table.", MessageType.Warning);
+
+            if (_currentSchema.Count == 0)
             {
-                DrawItemTableHeader();
-
-                _itemsScroll = EditorGUILayout.BeginScrollView(
-                    _itemsScroll, GUILayout.MaxHeight(300));
-
-                ItemDataRow toDelete = null;
-                foreach (var item in _items)
-                {
-                    if (DrawItemRow(item))
-                        toDelete = item;
-                }
-
-                if (toDelete != null)
-                {
-                    if (!toDelete.IsNew)
-                        DeleteItem(s.plaintextDbPath, toDelete);
-                    _items.Remove(toDelete);
-                }
-
-                EditorGUILayout.EndScrollView();
+                DrawHelpBox("No schema loaded for this table.", MessageType.Info);
+                EditorGUILayout.EndVertical();
+                return;
             }
+
+            // Header
+            EditorGUILayout.BeginHorizontal();
+            foreach (var c in _currentSchema)
+            {
+                string label = c.Name + (c.IsPrimaryKey ? " 🔑" : "");
+                GUILayout.Label(label, EditorStyles.miniLabel, GUILayout.Width(140));
+            }
+            GUILayout.Label("", EditorStyles.miniLabel, GUILayout.Width(24));
+            EditorGUILayout.EndHorizontal();
+            var headerRect = GUILayoutUtility.GetLastRect();
+            EditorGUI.DrawRect(new Rect(headerRect.x, headerRect.yMax, headerRect.width, 1),
+                new Color(0.4f, 0.4f, 0.4f));
+            EditorGUILayout.Space(2);
+
+            // Rows
+            _dbGridScroll = EditorGUILayout.BeginScrollView(_dbGridScroll, GUILayout.MaxHeight(320));
+
+            DynamicRow toDelete = null;
+            foreach (var row in _currentRows)
+            {
+                if (DrawGenericRow(row, pk))
+                    toDelete = row;
+            }
+
+            if (toDelete != null)
+            {
+                if (toDelete.IsNew)
+                {
+                    _currentRows.Remove(toDelete);
+                }
+                else if (pk == null)
+                {
+                    Log(LogLevel.Error,
+                        $"Can't delete — '{_selectedTable}' has no single-column primary key.");
+                }
+                else
+                {
+                    try
+                    {
+                        using var conn = new SQLite.SQLiteConnection(dbPath);
+                        DynamicSqlite.DeleteRow(conn, _selectedTable, pk, toDelete);
+                        _currentRows.Remove(toDelete);
+                        _totalRowCount--;
+                        Log(LogLevel.Success, $"✓ Deleted row where {pk.Name} = {toDelete.Original[pk.Name]}.");
+                    }
+                    catch (Exception e)
+                    {
+                        Log(LogLevel.Error, $"Delete failed: {e.Message}");
+                    }
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
+
+            // Pagination
+            EditorGUILayout.BeginHorizontal();
+            EditorGUI.BeginDisabledGroup(_rowPage == 0);
+            if (GUILayout.Button("◀ Prev", GUILayout.Width(70)))
+            {
+                _rowPage--;
+                ConfirmDiscardIfDirtyThen(() => LoadTableSchemaAndRows(dbPath));
+            }
+            EditorGUI.EndDisabledGroup();
+
+            int totalPages = Math.Max(1, (int)Math.Ceiling(_totalRowCount / (double)PageSize));
+            GUILayout.Label($"Page {_rowPage + 1} / {totalPages}", EditorStyles.miniLabel,
+                GUILayout.Width(90));
+
+            EditorGUI.BeginDisabledGroup((_rowPage + 1) * PageSize >= _totalRowCount);
+            if (GUILayout.Button("Next ▶", GUILayout.Width(70)))
+            {
+                _rowPage++;
+                ConfirmDiscardIfDirtyThen(() => LoadTableSchemaAndRows(dbPath));
+            }
+            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawItemTableHeader()
-        {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("item_id",     EditorStyles.miniLabel, GUILayout.Width(50));
-            GUILayout.Label("name",        EditorStyles.miniLabel, GUILayout.Width(110));
-            GUILayout.Label("description", EditorStyles.miniLabel, GUILayout.Width(160));
-            GUILayout.Label("category",    EditorStyles.miniLabel, GUILayout.Width(60));
-            GUILayout.Label("icon_name",   EditorStyles.miniLabel, GUILayout.Width(100));
-            GUILayout.Label("",            EditorStyles.miniLabel, GUILayout.Width(24));
-            EditorGUILayout.EndHorizontal();
-
-            var rect = GUILayoutUtility.GetLastRect();
-            EditorGUI.DrawRect(
-                new Rect(rect.x, rect.yMax, rect.width, 1),
-                new Color(0.4f, 0.4f, 0.4f));
-            EditorGUILayout.Space(2);
-        }
-
         /// <returns>true if the row's delete button was clicked</returns>
-        private bool DrawItemRow(ItemDataRow item)
+        private bool DrawGenericRow(DynamicRow row, ColumnSchema pk)
         {
             EditorGUI.BeginChangeCheck();
-
             EditorGUILayout.BeginHorizontal();
 
-            if (item.IsNew)
-                item.ItemId = EditorGUILayout.IntField(item.ItemId, GUILayout.Width(50));
-            else
-                GUILayout.Label(item.ItemId.ToString(), EditorStyles.miniLabel, GUILayout.Width(50));
+            foreach (var c in _currentSchema)
+            {
+                bool lockField = c.IsPrimaryKey && !row.IsNew; // don't let PK edits break the WHERE lookup
+                EditorGUI.BeginDisabledGroup(lockField || c.Kind == ColumnKind.Blob);
 
-            item.Name        = EditorGUILayout.TextField(item.Name, GUILayout.Width(110));
-            item.Description = EditorGUILayout.TextField(item.Description, GUILayout.Width(160));
-            item.Category    = EditorGUILayout.IntField(item.Category, GUILayout.Width(60));
-            item.IconName    = EditorGUILayout.TextField(item.IconName, GUILayout.Width(100));
+                string current = row.EditText.TryGetValue(c.Name, out var v) ? v : "";
+                string display = c.Kind == ColumnKind.Blob
+                    ? $"<{(row.Values[c.Name] as byte[])?.Length ?? 0} bytes>"
+                    : current;
+
+                string edited = EditorGUILayout.TextField(display, GUILayout.Width(140));
+                if (c.Kind != ColumnKind.Blob) row.EditText[c.Name] = edited;
+
+                EditorGUI.EndDisabledGroup();
+            }
 
             bool delete = GUILayout.Button("✕", EditorStyles.miniButton, GUILayout.Width(24));
-
             EditorGUILayout.EndHorizontal();
 
-            if (item.IsNew)
+            if (row.IsNew)
             {
                 GUI.color = new Color(0.95f, 0.75f, 0.2f);
                 EditorGUILayout.LabelField("  new — not saved yet", EditorStyles.miniLabel);
@@ -1369,93 +1395,142 @@ namespace ArcheCore.Editor
             }
 
             if (EditorGUI.EndChangeCheck())
-                _itemsDirty = true;
+            {
+                row.IsDirty = true;
+                _rowsDirty  = true;
+            }
 
             return delete;
         }
 
-        private void AddNewItem()
+        private void AddNewRow()
         {
-            int nextId = _items.Count > 0 ? _items.Max(i => i.ItemId) + 1 : 1;
-            _items.Add(new ItemDataRow
+            var row = new DynamicRow { IsNew = true, IsDirty = true };
+            foreach (var c in _currentSchema)
             {
-                ItemId      = nextId,
-                Name        = "New Item",
-                Description = "",
-                Category    = 0,
-                IconName    = "",
-                IsNew       = true
-            });
-            _itemsDirty = true;
-            Log(LogLevel.Info, $"Added new item row (item_id {nextId} — edit before saving).");
+                row.Values[c.Name]   = null;
+                row.EditText[c.Name] = "";
+            }
+            _currentRows.Add(row);
+            _rowsDirty = true;
+            Log(LogLevel.Info, $"Added new row to '{_selectedTable}' — fill in values, then Save.");
         }
 
-        private void LoadItems(string dbPath)
+        private void SaveTableChanges(string dbPath, ColumnSchema pk)
         {
+            var dirtyRows = _currentRows.Where(r => r.IsDirty).ToList();
+            if (dirtyRows.Count == 0)
+            {
+                _rowsDirty = false;
+                return;
+            }
+
+            int saved = 0, failed = 0;
+
             try
             {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
+                using var conn = new SQLite.SQLiteConnection(dbPath);
+                conn.RunInTransaction(() =>
                 {
-                    _items = conn.Table<ItemDataRow>().OrderBy(r => r.ItemId).ToList();
-                }
-                _itemsDirty = false;
-                Log(LogLevel.Success, $"Loaded {_items.Count} item(s).");
-            }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Failed to load items: {e.Message}");
-            }
-        }
-
-        private void SaveItems(string dbPath)
-        {
-            try
-            {
-                var itemsSnapshot = _items;
-
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
-                {
-                    conn.RunInTransaction(() =>
+                    foreach (var row in dirtyRows)
                     {
-                        foreach (var item in itemsSnapshot)
+                        try
                         {
-                            if (item.IsNew)
+                            if (!ParseEditTextIntoValues(row))
                             {
-                                conn.Insert(item);
-                                item.IsNew = false;
+                                failed++;
+                                continue;
+                            }
+
+                            if (row.IsNew)
+                            {
+                                DynamicSqlite.InsertRow(conn, _selectedTable, _currentSchema, row);
                             }
                             else
                             {
-                                conn.Update(item);
+                                if (pk == null)
+                                {
+                                    Log(LogLevel.Error,
+                                        $"Can't save — '{_selectedTable}' has no single-column primary key.");
+                                    failed++;
+                                    continue;
+                                }
+                                DynamicSqlite.UpdateRow(conn, _selectedTable, pk, _currentSchema, row);
                             }
-                        }
-                    });
-                }
 
-                _itemsDirty = false;
-                Log(LogLevel.Success,
-                    $"✓ Saved {_items.Count} item(s) to {Path.GetFileName(dbPath)}.");
+                            row.IsDirty = false;
+                            saved++;
+                        }
+                        catch (Exception rowEx)
+                        {
+                            failed++;
+                            Log(LogLevel.Error, $"Row save failed: {rowEx.Message}");
+                        }
+                    }
+                });
             }
             catch (Exception e)
             {
                 Log(LogLevel.Error, $"Save failed: {e.Message}");
+                return;
             }
+
+            _rowsDirty = _currentRows.Any(r => r.IsDirty);
+            _totalRowCount = DynamicSqlite.GetRowCount(
+                new SQLite.SQLiteConnection(dbPath), _selectedTable, _currentSchema, _rowSearch);
+
+            if (failed == 0)
+                Log(LogLevel.Success, $"✓ Saved {saved} row(s) to '{_selectedTable}'.");
+            else
+                Log(LogLevel.Warning, $"Saved {saved} row(s), {failed} failed — see errors above.");
         }
 
-        private void DeleteItem(string dbPath, ItemDataRow item)
+        /// <summary>Parses each column's EditText back into a typed value. Returns false (and logs) on a bad parse.</summary>
+        private bool ParseEditTextIntoValues(DynamicRow row)
         {
-            try
+            foreach (var c in _currentSchema)
             {
-                using (var conn = new SQLite.SQLiteConnection(dbPath))
+                if (c.Kind == ColumnKind.Blob) continue; // not editable here — leave as-is
+
+                string text = row.EditText.TryGetValue(c.Name, out var t) ? t : "";
+
+                if (string.IsNullOrEmpty(text))
                 {
-                    conn.Delete(item);
+                    if (c.NotNull && !(c.IsPrimaryKey && row.IsNew))
+                    {
+                        Log(LogLevel.Error, $"'{c.Name}' can't be empty (NOT NULL).");
+                        return false;
+                    }
+                    row.Values[c.Name] = null;
+                    continue;
                 }
-                Log(LogLevel.Success, $"✓ Deleted item_id {item.ItemId}.");
+
+                switch (c.Kind)
+                {
+                    case ColumnKind.Integer:
+                        if (!long.TryParse(text, out long lv))
+                        {
+                            Log(LogLevel.Error, $"'{c.Name}' expects a whole number, got '{text}'.");
+                            return false;
+                        }
+                        row.Values[c.Name] = lv;
+                        break;
+
+                    case ColumnKind.Real:
+                        if (!double.TryParse(text, out double dv))
+                        {
+                            Log(LogLevel.Error, $"'{c.Name}' expects a number, got '{text}'.");
+                            return false;
+                        }
+                        row.Values[c.Name] = dv;
+                        break;
+
+                    default: // Text
+                        row.Values[c.Name] = text;
+                        break;
+                }
             }
-            catch (Exception e)
-            {
-                Log(LogLevel.Error, $"Delete failed: {e.Message}");
-            }
+            return true;
         }
 
         // ═════════════════════════════════════════════════════════════════════

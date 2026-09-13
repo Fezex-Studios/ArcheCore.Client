@@ -5,24 +5,30 @@ using System.Security.Cryptography;
 namespace ArcheCore.Client.GameData
 {
     /// <summary>
-    /// Decrypts gamedata.db at runtime. Format on disk: [16-byte IV][AES-256-CBC ciphertext].
-    //
-    /// IMPORTANT — what this actually protects against: casual browsing of
-    /// unreleased quest/item/dialog text in a tool like DB Browser for SQLite.
-    /// It does NOT protect against a determined reverse engineer — the key
-    /// ships inside the IL2CPP binary because the client has to be able to
-    /// decrypt the file to play the game, same fundamental limit as any
-    /// client-side DRM. Don't treat this as "secure," treat it as "not
-    /// trivially openable by double-clicking the file."
+    /// Decrypts the gamedata content package at runtime. Format on disk:
+    /// [16-byte IV][AES-256-CBC ciphertext].
     ///
-    /// Key must exactly match whatever key encrypt_gamedata.py used to
-    /// produce the .db file shipped in StreamingAssets / on the Authserver.
+    /// IMPORTANT — what this actually protects against: casual browsing of
+    /// unreleased quest/item/dialog text by opening the file in a generic
+    /// tool. It does NOT protect against a determined reverse engineer —
+    /// the key ships inside the IL2CPP binary because the client has to be
+    /// able to decrypt the file to play the game, same fundamental limit as
+    /// any client-side DRM. Don't treat this as "secure," treat it as "not
+    /// trivially openable by double-clicking the file." Switching the
+    /// payload from a SQLite file to the custom binary format in
+    /// GameDataBinaryFormat.cs doesn't change that threat model — it's
+    /// exactly as secure as this key staying private, same as before.
+    ///
+    /// Key must exactly match whatever key the Editor's "Export Binary +
+    /// Encrypt" step (or encrypt_gamedata.py, if you still use that
+    /// standalone) used to produce the file shipped in StreamingAssets /
+    /// on the Authserver.
     /// </summary>
     public static class GameDataCrypto
     {
-        // 32 bytes = AES-256. Regenerate this (and re-run encrypt_gamedata.py
-        // with the matching value) any time you suspect it's leaked — it's
-        // only a deterrent, so rotating it occasionally costs nothing and
+        // 32 bytes = AES-256. Regenerate this (and re-export/re-encrypt
+        // gamedata) any time you suspect it's leaked — it's only a
+        // deterrent, so rotating it occasionally costs nothing and
         // invalidates any previously-extracted key.
         private static readonly byte[] Key =
         {
@@ -33,17 +39,18 @@ namespace ArcheCore.Client.GameData
         };
 
         /// <summary>
-        /// Reads an encrypted gamedata.db and writes the decrypted plaintext
-        /// to outputPath. Returns false (and logs nothing itself — caller
-        /// decides how to react) if the file is malformed.
+        /// Decrypts an encrypted gamedata blob and returns the plaintext
+        /// bytes directly — no temp file involved, so nothing plaintext
+        /// ever touches disk on the client. Throws InvalidDataException if
+        /// the data is too short to contain an IV; a wrong key just
+        /// produces garbage bytes or a padding exception, which
+        /// GameDataBinaryFormat.ReadItems will catch as a bad magic number.
         /// </summary>
-        public static bool DecryptToFile(string encryptedPath, string outputPath)
+        public static byte[] Decrypt(byte[] fileBytes)
         {
-            byte[] fileBytes = File.ReadAllBytes(encryptedPath);
-
             const int ivLength = 16;
             if (fileBytes.Length <= ivLength)
-                return false;
+                throw new InvalidDataException("Data too short to contain an IV.");
 
             byte[] iv = new byte[ivLength];
             Buffer.BlockCopy(fileBytes, 0, iv, 0, ivLength);
@@ -52,9 +59,9 @@ namespace ArcheCore.Client.GameData
             Buffer.BlockCopy(fileBytes, ivLength, cipherText, 0, cipherText.Length);
 
             using Aes aes = Aes.Create();
-            aes.Key  = Key;
-            aes.IV   = iv;
-            aes.Mode = CipherMode.CBC;
+            aes.Key     = Key;
+            aes.IV      = iv;
+            aes.Mode    = CipherMode.CBC;
             aes.Padding = PaddingMode.PKCS7;
 
             using ICryptoTransform decryptor = aes.CreateDecryptor();
@@ -65,8 +72,7 @@ namespace ArcheCore.Client.GameData
                 crypto.CopyTo(output);
             }
 
-            File.WriteAllBytes(outputPath, output.ToArray());
-            return true;
+            return output.ToArray();
         }
     }
 }
