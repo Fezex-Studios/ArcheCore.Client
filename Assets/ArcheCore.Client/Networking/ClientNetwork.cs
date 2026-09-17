@@ -96,6 +96,9 @@ namespace ArcheCore.Client.Networking
             // Server tick numbers restart with each connection.
             W2CWorldSnapshotHandler.Reset();
 
+            // Drop any world spawn/despawn work left over from a previous connection.
+            WorldLoader.ClearPending();
+
             client.Connect(ip, 7777, "MMO");
         }
         private void OnDestroy()

@@ -1,7 +1,6 @@
 ﻿using LiteNetLib;
 using MessagePack;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using ArcheCore.Client.World;
 using ArcheCore.Client.Gameplay;
 using ArcheCore.Network.Client;
@@ -16,22 +15,24 @@ namespace ArcheCore.Client.Networking.W2C
             var packet = MessagePackSerializer
                 .Deserialize<W2CSpawnNpcPacket>(reader.GetRemainingBytes());
 
-            ClientNetwork.Instance.StartCoroutine(SpawnNpc(packet));
+            // Scene load and ordering are owned by WorldLoader.
+            WorldLoader.RunWhenReady(() => SpawnNpc(packet));
         }
 
-        private System.Collections.IEnumerator SpawnNpc(W2CSpawnNpcPacket packet)
+        private static void SpawnNpc(W2CSpawnNpcPacket packet)
         {
-            if (SceneManager.GetActiveScene().name != "main_world")
-                yield return new WaitUntil(() =>
-                    SceneManager.GetActiveScene().name == "main_world");
+            var prefabs = WorldObjectPrefabRegistry.Instance;
+            if (prefabs == null)
+            {
+                Debug.LogError($"[SpawnNpc] No WorldObjectPrefabRegistry - cannot spawn '{packet.Name}' ({packet.NetworkId}).");
+                return;
+            }
 
-            yield return new WaitUntil(() =>
-                WorldObjectPrefabRegistry.Instance != null);
+            var prefab = prefabs.GetPrefab(packet.ModelType);
+            if (prefab == null)
+                return; // GetPrefab already logged the missing ModelType
 
-            var prefab = WorldObjectPrefabRegistry.Instance.GetPrefab(packet.ModelType);
-            if (prefab == null) yield break;
-
-            var obj = GameObject.Instantiate(prefab);
+            var obj = Object.Instantiate(prefab);
             obj.transform.position = new Vector3(packet.X, packet.Y, packet.Z);
             obj.name = $"{packet.Name}_{packet.NetworkId}";
 
@@ -45,15 +46,15 @@ namespace ArcheCore.Client.Networking.W2C
             // Without this, nothing can ever find this NPC again to move or
             // despawn it - W2CNpcPositionHandler/W2CNpcDespawnHandler both
             // look entities up by NetworkId through this registry.
+            // (NpcRegistry.Register also destroys an older object with the
+            // same id, so a duplicate spawn packet can't create two orcs.)
             NpcRegistry.Instance?.Register(identity);
 
             // Makes this NPC a valid target for PlayerInteraction's raycast.
             // NOTE: the prefab's collider also needs to be on the layer
-            // PlayerInteraction is configured to raycast against - set that
-            // in the Inspector on your NPC prefab, this can't be done from
-            // code alone.
+            // PlayerInteraction raycasts against - set that on the prefab.
             var interactable = obj.AddComponent<InteractableIdentity>();
-            interactable.NetworkId = packet.NetworkId;
+            interactable.NetworkId     = packet.NetworkId;
             interactable.InteractRange = packet.InteractRange;
 
             Debug.Log($"[SpawnNpc] Spawned '{packet.Name}' (Lv{packet.Level}) at {obj.transform.position}");
