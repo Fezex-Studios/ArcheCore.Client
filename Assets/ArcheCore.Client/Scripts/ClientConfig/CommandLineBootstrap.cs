@@ -2,71 +2,82 @@
 using ArcheCore.Client.Networking;
 using UnityEngine;
 
-
 namespace ArcheCore.Client.ClientConfig
 {
+    /// <summary>
+    /// Reads -token / -ip and auto-connects ONCE per application run.
+    ///
+    /// server_select is reloaded after every disconnect. Without the
+    /// once-only guard this would re-apply the (already burned) launcher
+    /// token and immediately reconnect with it, failing in a loop.
+    /// </summary>
     public class CommandLineBootstrap : MonoBehaviour
     {
         [Tooltip("IP used when no -ip argument is passed.")]
         [SerializeField] private string fallbackIp = "127.0.0.1";
-    
+
     #if UNITY_EDITOR
         [Header("Editor Testing Only - not used in builds")]
         [SerializeField] private string editorToken = "";
         [SerializeField] private string editorIp    = "127.0.0.1";
     #endif
-    
+
+        private static bool _consumed;
+
         private string _connectIp;
         private bool   _shouldAutoConnect;
-    
+
         private void Awake()
         {
+            if (_consumed)
+                return;
+
+            _consumed = true;
+
     #if UNITY_EDITOR
             if (!string.IsNullOrEmpty(editorToken))
             {
                 SessionManager.Token = editorToken;
                 _connectIp         = string.IsNullOrEmpty(editorIp) ? fallbackIp : editorIp;
                 _shouldAutoConnect = true;
-                Debug.Log($"[Bootstrap] Using Editor token override: {editorToken}");
+                Debug.Log("[Bootstrap] Using Editor token override.");
                 return;
             }
     #endif
-    
+
             string[] args = System.Environment.GetCommandLineArgs();
-    
+
             string token = null;
             string ip    = null;
-    
+
             for (int i = 0; i < args.Length; i++)
             {
-                Debug.Log($"ARG: {args[i]}");
-    
                 if (args[i] == "-token" && i + 1 < args.Length)
                 {
                     token = args[i + 1];
                     SessionManager.Token = token;
-                    Debug.Log($"[Bootstrap] Token loaded: {token}");
+                    Debug.Log("[Bootstrap] Token loaded from command line.");
                 }
-    
+
                 if (args[i] == "-ip" && i + 1 < args.Length)
                 {
                     ip = args[i + 1];
                     Debug.Log($"[Bootstrap] IP loaded: {ip}");
                 }
             }
-    
+
             if (!string.IsNullOrEmpty(token))
             {
                 _connectIp         = !string.IsNullOrEmpty(ip) ? ip : fallbackIp;
                 _shouldAutoConnect = true;
             }
         }
-    
+
         private void Start()
         {
             if (!_shouldAutoConnect)
                 return;
-    
+
             if (ClientNetwork.Instance == null)
             {
                 Debug.LogError(
@@ -74,10 +85,9 @@ namespace ArcheCore.Client.ClientConfig
                     "Make sure ClientNetwork is in the same scene as CommandLineBootstrap.");
                 return;
             }
-    
+
             Debug.Log($"[Bootstrap] Auto-connecting to {_connectIp}");
             ClientNetwork.Instance.Connect(_connectIp);
         }
     }
 }
-

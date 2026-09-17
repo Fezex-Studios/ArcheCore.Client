@@ -1,4 +1,4 @@
-﻿using LiteNetLib;
+using LiteNetLib;
 using MessagePack;
 using UnityEngine;
 using ArcheCore.Client.World;

@@ -1,4 +1,4 @@
-﻿using ArcheCore.Library.Net.Worldserver;
+using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Shared.Packets.C2W;
 using LiteNetLib;
 using Shared;
