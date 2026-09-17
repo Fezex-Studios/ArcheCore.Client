@@ -7,7 +7,6 @@ using LiteNetLib;
 using MessagePack;
 using ArcheCore.Network.Shared.Packets.W2C;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -24,44 +23,37 @@ namespace ArcheCore.Client.Networking.W2C
 
             if (packet.IsLocalPlayer)
             {
+                // Set immediately so snapshots/positions for "me" are ignored
+                // even before the scene finishes loading.
                 ClientNetwork.Instance.LocalNetworkId = packet.NetworkId;
                 CharacterFlowEvents.RaiseCharacterSpawned();
             }
 
-            ClientNetwork.Instance.StartCoroutine(LoadWorldThenSpawn(packet));
+            // Scene load is owned by WorldLoader - this only queues the spawn.
+            WorldLoader.RunWhenReady(() => Spawn(packet));
         }
 
-        private System.Collections.IEnumerator LoadWorldThenSpawn(
-            W2CSpawnPlayerPacket packet)
+        private static void Spawn(W2CSpawnPlayerPacket packet)
         {
-            if (SceneManager
-                    .GetActiveScene().name != "main_world")
+            var registry = PlayerRegistry.Instance;
+            if (registry == null)
             {
-                AsyncOperation load =
-                    SceneManager
-                        .LoadSceneAsync("main_world");
-
-                yield return load;
+                Debug.LogError($"[SpawnPlayer] No PlayerRegistry - cannot spawn NetworkId {packet.NetworkId}.");
+                return;
             }
 
-            PlayerController pc =
-                PlayerRegistry.Instance?.Spawn(
-                    packet.NetworkId,
-                    new Vector3(
-                        packet.x,
-                        packet.y,
-                        packet.z),
-                    packet.IsLocalPlayer);
+            PlayerController pc = registry.Spawn(
+                packet.NetworkId,
+                new Vector3(packet.x, packet.y, packet.z),
+                packet.IsLocalPlayer);
 
             if (packet.IsLocalPlayer && pc != null)
             {
                 ClientNetwork.Instance.LocalPlayer = pc;
 
-                // Scene is loaded and the local player object exists —
-                // this is the actual "ready" moment, not "packet arrived."
-                // Any HUD element that needs initial character data reacts
-                // to PlayerStatEvents.OnCharacterDataChanged rather than
-                // requesting it itself.
+                // Scene is loaded and the local player object exists - this is
+                // the actual "ready" moment. HUD elements react to
+                // PlayerStatEvents.OnCharacterDataChanged from the reply.
                 C2WPlayerSpawnedPacketSender.Send(ClientNetwork.Instance.ServerPeer);
             }
         }

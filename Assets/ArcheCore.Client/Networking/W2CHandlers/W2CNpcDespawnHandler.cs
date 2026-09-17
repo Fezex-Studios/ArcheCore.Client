@@ -16,8 +16,12 @@ namespace ArcheCore.Client.Networking.W2C
                     .Deserialize<W2CNpcDespawnPacket>(
                         reader.GetRemainingBytes());
 
-            NpcRegistry.Instance
-                ?.Despawn(packet.NetworkId);
+            int networkId = packet.NetworkId;
+
+            // Same ordering guarantee as player leave: never runs before the
+            // matching spawn that arrived earlier.
+            WorldLoader.RunWhenReady(() =>
+                NpcRegistry.Instance?.Despawn(networkId));
         }
     }
 }
