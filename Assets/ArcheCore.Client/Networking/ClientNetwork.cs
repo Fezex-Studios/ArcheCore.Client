@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using ArchCore.Client;
 using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;

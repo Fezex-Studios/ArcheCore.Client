@@ -17,6 +17,6 @@ MonoBehaviour:
   encryptedDbDir: 
   decryptedDbOutputDir: 
   worldServerDbPath: 
-  lastDbTarget: WorldServer
+  lastDbTarget: ClientGameData
   lastCustomDbPath: 
   lastSelectedTable: 

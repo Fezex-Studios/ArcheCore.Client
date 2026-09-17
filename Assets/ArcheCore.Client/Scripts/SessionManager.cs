@@ -1,4 +1,4 @@
-﻿namespace ArcheCore.Client
+namespace ArcheCore.Client
 {
     /// <summary>
     /// Holds session state for the current client.
