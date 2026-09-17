@@ -7,48 +7,52 @@ using UnityEngine.UI;
 namespace ArcheCore.Client.UI
 {
     /// <summary>
-    /// Server select + (optional) login.
+    /// Server select panel.
     ///
-    /// If the client already has an unused token (from the launcher's -token
-    /// argument), Connect goes straight to the world server. Otherwise - e.g.
-    /// after any disconnect, since tokens are one-shot - it logs in with the
-    /// username/password fields first to get a fresh token.
+    /// Logging in is the LAUNCHER's job: it starts the client with a fresh
+    /// one-shot token (-token). Once that token has been used (any connect
+    /// attempt), the only way to play again is to close the game and press
+    /// Play in the launcher, which fetches a new one.
     ///
-    /// Inspector: ipInput is required. usernameInput, passwordInput,
-    /// statusText and connectButton are optional but needed for in-client
-    /// login and for showing disconnect reasons.
+    /// Inspector: ipInput is required. statusText and connectButton are
+    /// optional - assign them to show disconnect reasons and to disable
+    /// Connect when there is no usable token.
     /// </summary>
     public class ServerSelectUI : MonoBehaviour, IUIPanel
     {
+        private const string RelaunchMessage =
+            "Your session has ended. Close the game and press Play in the launcher.";
+
         [SerializeField] private TMP_InputField ipInput;
 
-        [Header("Login (needed to reconnect without the launcher)")]
-        [SerializeField] private TMP_InputField usernameInput;
-        [SerializeField] private TMP_InputField passwordInput;
-
-        [Header("Feedback")]
+        [Header("Feedback (optional)")]
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private Button   connectButton;
-
-        private bool _busy;
 
         public bool IsVisible => gameObject.activeSelf;
 
         public void Show()
         {
             gameObject.SetActive(true);
-            _busy = false;
-            SetInteractable(true);
 
-            if (passwordInput != null)
-                passwordInput.text = string.Empty;
+            bool canConnect = SessionManager.HasUsableToken;
+            if (connectButton != null)
+                connectButton.interactable = canConnect;
 
             if (!string.IsNullOrEmpty(ClientNetwork.LastDisconnectMessage))
-                SetStatus(ClientNetwork.LastDisconnectMessage);
-            else if (!SessionManager.HasUsableToken && usernameInput != null)
-                SetStatus("Log in to connect.");
+            {
+                SetStatus(canConnect
+                    ? ClientNetwork.LastDisconnectMessage
+                    : $"{ClientNetwork.LastDisconnectMessage}\n{RelaunchMessage}");
+            }
+            else if (!canConnect)
+            {
+                SetStatus("Start the game from the launcher to log in.");
+            }
             else
+            {
                 SetStatus(string.Empty);
+            }
         }
 
         public void Hide() => gameObject.SetActive(false);
@@ -56,48 +60,18 @@ namespace ArcheCore.Client.UI
         /// <summary>Wired to the Connect button's OnClick.</summary>
         public void Connect()
         {
-            if (_busy)
+            if (!SessionManager.HasUsableToken)
+            {
+                SetStatus(RelaunchMessage);
                 return;
+            }
 
-            ConnectAsync();
-        }
-
-        private async void ConnectAsync()
-        {
             string ip = ipInput == null || string.IsNullOrWhiteSpace(ipInput.text)
                 ? "127.0.0.1"
                 : ipInput.text.Trim();
 
-            if (!SessionManager.HasUsableToken)
-            {
-                if (usernameInput == null || passwordInput == null)
-                {
-                    SetStatus("Session expired. Restart from the launcher to log in again.");
-                    return;
-                }
-
-                _busy = true;
-                SetInteractable(false);
-                SetStatus("Logging in...");
-
-                var result = await AuthClient.LoginAsync(usernameInput.text, passwordInput.text);
-
-                // Panel may have been destroyed (scene change) while waiting.
-                if (this == null)
-                    return;
-
-                _busy = false;
-                SetInteractable(true);
-
-                if (!result.Success)
-                {
-                    SetStatus(result.Error);
-                    return;
-                }
-
-                SessionManager.Token = result.Token;
-                passwordInput.text = string.Empty;
-            }
+            if (connectButton != null)
+                connectButton.interactable = false; // the token can only be used once
 
             SetStatus("Connecting...");
             ClientNetwork.Instance.Connect(ip);
@@ -114,14 +88,6 @@ namespace ArcheCore.Client.UI
 
             statusText.text = message ?? string.Empty;
             statusText.gameObject.SetActive(!string.IsNullOrEmpty(message));
-        }
-
-        private void SetInteractable(bool value)
-        {
-            if (connectButton != null) connectButton.interactable = value;
-            if (usernameInput != null) usernameInput.interactable = value;
-            if (passwordInput != null) passwordInput.interactable = value;
-            if (ipInput != null)       ipInput.interactable       = value;
         }
     }
 }

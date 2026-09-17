@@ -1,16 +1,24 @@
 ﻿using TMPro;
 using UnityEngine;
-using ArcheCore.Client.Networking;
-using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.UI.Events;
 using ArcheCore.Network.Shared.Packets.W2C;
 
 namespace ArcheCore.Client.UI
 {
+    /// <summary>
+    /// HUD: shows the local character's name and level.
+    /// Either label may be left empty in the Inspector - it's just skipped.
+    /// </summary>
     public class PlayerSpawnData : MonoBehaviour
     {
         [SerializeField] private TMP_Text levelLabel;
         [SerializeField] private TMP_Text playerName;
+
+        private void Awake()
+        {
+            if (levelLabel == null && playerName == null)
+                Debug.LogWarning($"[PlayerSpawnData] No labels assigned on '{name}' - this component does nothing.", this);
+        }
 
         private void OnEnable()
         {
@@ -26,19 +34,19 @@ namespace ArcheCore.Client.UI
 
         private void SetCharacterData(CharacterData data)
         {
-            if (ClientNetwork.Instance.ServerPeer == null)
-            {
-                Debug.LogWarning("No worldserver connected.");
+            if (data == null)
                 return;
-            }
-            levelLabel.text = data.Level.ToString();
-            playerName.text = data.Name;
-            Debug.Log($"Character Name: {data.Name} | Character Level: {data.Level}");
+
+            SetLevel(data.Level);
+
+            if (playerName != null)
+                playerName.text = data.Name;
         }
 
         private void SetLevel(int level)
         {
-            levelLabel.text = level.ToString();
+            if (levelLabel != null)
+                levelLabel.text = level.ToString();
         }
     }
 }

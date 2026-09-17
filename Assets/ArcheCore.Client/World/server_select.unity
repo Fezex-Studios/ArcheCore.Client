@@ -1881,6 +1881,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Shared.ServerSelectUI
   ipInput: {fileID: 630723696}
+  statusText: {fileID: 0}
+  connectButton: {fileID: 0}
 --- !u!1 &1168241070
 GameObject:
   m_ObjectHideFlags: 0
@@ -3557,7 +3559,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c63e2193cc3c4adba02379becafcd89d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.Networking.ClientNetwork
-  editorToken: 421695f0-67a1-41cc-bfa3-afaa5efaba5f
+  editorToken: 8717a9b9-5305-482b-b2e9-f23a545d2607
 --- !u!4 &2015394151
 Transform:
   m_ObjectHideFlags: 0
