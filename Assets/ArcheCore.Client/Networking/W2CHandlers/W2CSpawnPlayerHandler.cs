@@ -1,4 +1,4 @@
-﻿using ArchCore.Client;
+using ArchCore.Client;
 using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.UI;

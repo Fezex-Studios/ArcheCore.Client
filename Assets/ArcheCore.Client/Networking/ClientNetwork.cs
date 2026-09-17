@@ -1,12 +1,13 @@
-﻿using ArchCore.Client;
+﻿using System;
+using ArchCore.Client;
 using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
+using ArcheCore.Client.UI.Events;
 using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Client;
 using LiteNetLib;
-
+using MessagePack;
 using UnityEngine;
-
 
 namespace ArcheCore.Client.Networking
 {
@@ -15,6 +16,12 @@ namespace ArcheCore.Client.Networking
         INetEventListener
     {
         public static ClientNetwork Instance;
+
+        /// <summary>Scene the client returns to after a disconnect.</summary>
+        public const string ServerSelectSceneName = "server_select";
+
+        private const int WorldServerPort = 7777;
+        private const string ConnectionKey = "MMO";
 
 #if UNITY_EDITOR
         [Header("Editor Testing Only - not used in builds")]
@@ -25,8 +32,12 @@ namespace ArcheCore.Client.Networking
         public NetPeer          ServerPeer     { get; private set; }
         public PlayerController LocalPlayer    { get; set; }
 
-        private NetManager      client;
+        /// <summary>Why the last connection ended. Shown by ServerSelectUI; cleared on a successful connect.</summary>
+        public static string LastDisconnectMessage { get; private set; }
+
+        private NetManager client;
         private readonly ClientPacketDispatcher dispatcher = new();
+        private bool _quitting;
 
         private void Awake()
         {
@@ -48,21 +59,19 @@ namespace ArcheCore.Client.Networking
             if (!string.IsNullOrEmpty(editorToken))
             {
                 SessionManager.Token = editorToken;
-                Debug.Log($"[ClientNetwork] Using Editor token override: {editorToken}");
+                Debug.Log("[ClientNetwork] Using Editor token override.");
                 return;
             }
 #endif
 
-            string[] args = System.Environment.GetCommandLineArgs();
+            string[] args = Environment.GetCommandLineArgs();
 
             for (int i = 0; i < args.Length; i++)
             {
-                Debug.Log($"ARG: {args[i]}");
-
                 if (args[i] == "-token" && i + 1 < args.Length)
                 {
                     SessionManager.Token = args[i + 1];
-                    Debug.Log($"[ClientNetwork] Token loaded from args: {SessionManager.Token}");
+                    Debug.Log("[ClientNetwork] Token loaded from command line.");
                 }
             }
         }
@@ -74,9 +83,7 @@ namespace ArcheCore.Client.Networking
 
         public void Connect(string ip)
         {
-            // If a previous session left a client running (e.g. Stop/Play again
-            // in the Editor without a clean shutdown), tear it down first so we
-            // don't try to bind a second socket on the same port.
+            // Tear down any previous client so we don't bind a second socket.
             if (client != null)
             {
                 client.Stop();
@@ -84,26 +91,40 @@ namespace ArcheCore.Client.Networking
             }
 
             ServerPeer = null;
+            LocalNetworkId = 0;
+            LocalPlayer = null;
+
+            if (!SessionManager.HasUsableToken)
+            {
+                FailConnection("You need to log in again.");
+                return;
+            }
 
             client = new NetManager(this);
 
             if (!client.Start())
             {
                 Debug.LogError("[ClientNetwork] Failed to start NetManager — local port may already be in use.");
+                FailConnection("Couldn't open a network socket.");
                 return;
             }
 
-            // Server tick numbers restart with each connection.
+            // Server tick numbers restart with each connection, and nothing
+            // queued for a previous world session may run in this one.
             W2CWorldSnapshotHandler.Reset();
+            WorldLoader.ClearPending();
 
-            client.Connect(ip, 7777, "MMO");
+            client.Connect(ip, WorldServerPort, ConnectionKey);
         }
+
         private void OnDestroy()
         {
             client?.Stop();
         }
+
         private void OnApplicationQuit()
         {
+            _quitting = true;
             client?.Stop();
         }
 
@@ -118,40 +139,42 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.SpawnPlayer,    new W2CSpawnPlayerHandler());
             dispatcher.Register(Opcodes.PlayerPosition, new W2CPlayerPositionHandler());
             dispatcher.Register(Opcodes.PlayerLeave,    new W2CPlayerLeaveHandler());
-            dispatcher.Register(Opcodes.Announcement, new W2CAnnouncementHandler());
-            dispatcher.Register(Opcodes.SpawnNpc, new W2CSpawnNpcHandler());
-            dispatcher.Register(Opcodes.NpcPosition, new W2CNpcPositionHandler());
-            dispatcher.Register(Opcodes.NpcDespawn, new W2CNpcDespawnHandler());
-            
-            dispatcher.Register(Opcodes.W2CTestPacket, new W2CTestPacketHandler());
+            dispatcher.Register(Opcodes.Announcement,   new W2CAnnouncementHandler());
+            dispatcher.Register(Opcodes.SpawnNpc,       new W2CSpawnNpcHandler());
+            dispatcher.Register(Opcodes.NpcPosition,    new W2CNpcPositionHandler());
+            dispatcher.Register(Opcodes.NpcDespawn,     new W2CNpcDespawnHandler());
+
+            dispatcher.Register(Opcodes.W2CTestPacket,       new W2CTestPacketHandler());
             dispatcher.Register(Opcodes.PlayerLevelResponse, new W2CPlayerlevelResponseHandler());
 
-            // NEW — replaces W2CCharacterNotFound in the login flow
+            // Character roster after authentication
             dispatcher.Register(Opcodes.W2CCharacterList, new W2CCharacterListHandler());
 
             // --- Interaction system ---
             dispatcher.Register(Opcodes.W2CInteractDialogue, new W2CInteractDialogueHandler());
-            dispatcher.Register(Opcodes.W2CInteractLoot,      new W2CInteractLootHandler());
-            dispatcher.Register(Opcodes.W2CInteractDenied,    new  W2CInteractDeniedHandler());
-            dispatcher.Register(Opcodes.ChatMessage, new W2CChatMessageHandler());
-            
-            dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
-            dispatcher.Register(Opcodes.PlayerSpawned, new W2CCharacterDataHandler());
+            dispatcher.Register(Opcodes.W2CInteractLoot,     new W2CInteractLootHandler());
+            dispatcher.Register(Opcodes.W2CInteractDenied,   new W2CInteractDeniedHandler());
+            dispatcher.Register(Opcodes.ChatMessage,         new W2CChatMessageHandler());
 
-            // Batched movement snapshots (opcode 30). This is now the ONLY way
-            // the server sends other players' movement.
+            dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
+            dispatcher.Register(Opcodes.PlayerSpawned,    new W2CCharacterDataHandler());
+
+            // Batched movement snapshots (opcode 30) - the only way the server
+            // sends other players' movement.
             dispatcher.Register(Opcodes.W2CWorldSnapshot, new W2CWorldSnapshotHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
         {
             ServerPeer = peer;
-
-            Debug.Log($"Token = {SessionManager.Token}");
+            LastDisconnectMessage = null;
 
             C2WAuthenticatePacket.Send(peer, SessionManager.Token);
 
-            Debug.Log("Authenticate Sent");
+            // The world server burns the token when it validates it.
+            SessionManager.MarkTokenUsed();
+
+            Debug.Log("[ClientNetwork] Connected - authentication sent.");
         }
 
         public void OnNetworkReceive(
@@ -160,18 +183,97 @@ namespace ArcheCore.Client.Networking
             byte             channel,
             DeliveryMethod   delivery)
         {
-            Opcodes packet = (Opcodes)reader.GetUShort();
-            dispatcher.Handle(packet, reader);
-            reader.Recycle();
+            Opcodes packet = 0;
+
+            try
+            {
+                packet = (Opcodes)reader.GetUShort();
+                dispatcher.Handle(packet, reader);
+            }
+            catch (MessagePackSerializationException e)
+            {
+                // Usually means client and server were built from different
+                // ArcheCore.Network versions.
+                Debug.LogError($"[ClientNetwork] Could not read {packet} packet (ArcheCore.Network.dll out of date?): {e.Message}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[ClientNetwork] Handler for {packet} threw:");
+                Debug.LogException(e);
+            }
+            finally
+            {
+                reader.Recycle();
+            }
         }
 
         public void OnPeerDisconnected(NetPeer peer, DisconnectInfo info)
         {
-            if (ServerPeer == peer)
-                ServerPeer = null;
+            if (_quitting)
+                return;
+
+            // Ignore a stale peer from an older connection.
+            if (ServerPeer != null && ServerPeer != peer)
+                return;
+
+            string message = DescribeDisconnect(info);
+            Debug.LogWarning($"[ClientNetwork] Disconnected ({info.Reason}): {message}");
+
+            FailConnection(message);
         }
+
+        /// <summary>
+        /// Common "connection is over" path: reset state, go back to the
+        /// server select screen and tell the UI why.
+        /// </summary>
+        private void FailConnection(string message)
+        {
+            ServerPeer = null;
+            LocalNetworkId = 0;
+            LocalPlayer = null;
+
+            // Token is spent (or was never valid) - a fresh login is required.
+            SessionManager.ClearToken();
+
+            W2CWorldSnapshotHandler.Reset();
+
+            LastDisconnectMessage = message;
+
+            // Loads server_select (or queues it if main_world is mid-load).
+            WorldLoader.ReturnToScene(ServerSelectSceneName);
+
+            ConnectionEvents.RaiseDisconnected(message);
+        }
+
+        private static string DescribeDisconnect(DisconnectInfo info)
+        {
+            switch (info.Reason)
+            {
+                case DisconnectReason.ConnectionFailed:
+                    return "Could not reach the world server.";
+                case DisconnectReason.Timeout:
+                    return "Connection to the world server timed out.";
+                case DisconnectReason.HostUnreachable:
+                case DisconnectReason.NetworkUnreachable:
+                    return "Network unreachable. Check your connection.";
+                case DisconnectReason.ConnectionRejected:
+                    return "The world server rejected the connection (client may be out of date).";
+                case DisconnectReason.RemoteConnectionClose:
+                    return "Disconnected by the server. Your session may have expired or you logged in elsewhere. Please log in again.";
+                case DisconnectReason.DisconnectPeerCalled:
+                    return "Disconnected.";
+                default:
+                    return $"Disconnected ({info.Reason}). Please log in again.";
+            }
+        }
+
         public void OnConnectionRequest(ConnectionRequest request) { }
-        public void OnNetworkError(System.Net.IPEndPoint endPoint, System.Net.Sockets.SocketError error) { }
+
+        public void OnNetworkError(System.Net.IPEndPoint endPoint, System.Net.Sockets.SocketError error)
+        {
+            Debug.LogWarning($"[ClientNetwork] Network error: {error}");
+        }
+
         public void OnNetworkLatencyUpdate(NetPeer peer, int latency) { }
         public void OnNetworkReceiveUnconnected(System.Net.IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }
     }

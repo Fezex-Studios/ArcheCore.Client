@@ -37,6 +37,10 @@ namespace ArcheCore.Client.Networking
         private static readonly Queue<Action> Pending = new();
         private static bool _loading;
 
+        // Set when a disconnect happens while main_world is still loading: the
+        // in-flight load can't be cancelled, so we switch scenes when it ends.
+        private static string _returnScene;
+
         /// <summary>True when main_world is active, its registries exist, and nothing is waiting.</summary>
         public static bool IsReady =>
             !_loading &&
@@ -69,6 +73,25 @@ namespace ArcheCore.Client.Networking
         /// </summary>
         public static void ClearPending() => Pending.Clear();
 
+        /// <summary>
+        /// Leaves the world (e.g. after a disconnect): drops queued world work
+        /// and loads <paramref name="sceneName"/>. If main_world is still
+        /// loading, the switch happens as soon as that load finishes.
+        /// </summary>
+        public static void ReturnToScene(string sceneName)
+        {
+            Pending.Clear();
+
+            if (_loading)
+            {
+                _returnScene = sceneName;
+                return;
+            }
+
+            if (SceneManager.GetActiveScene().name != sceneName)
+                SceneManager.LoadScene(sceneName);
+        }
+
         private static void EnsureLoading()
         {
             if (_loading)
@@ -81,6 +104,7 @@ namespace ArcheCore.Client.Networking
             }
 
             _loading = true;
+            _returnScene = null;
             ClientNetwork.Instance.StartCoroutine(LoadAndFlush());
         }
 
@@ -102,6 +126,9 @@ namespace ArcheCore.Client.Networking
                     yield return null;
             }
 
+            if (TryHandleReturn())
+                yield break;
+
             // Scene singletons set Instance in Awake. Unity's == null is also true
             // for destroyed objects, so a stale Instance from an old scene won't pass.
             float waited = 0f;
@@ -111,6 +138,9 @@ namespace ArcheCore.Client.Networking
                 waited += Time.unscaledDeltaTime;
                 yield return null;
             }
+
+            if (TryHandleReturn())
+                yield break;
 
             if (PlayerRegistry.Instance == null)
                 Debug.LogError("[WorldLoader] PlayerRegistry not found in main_world - players cannot spawn.");
@@ -124,6 +154,21 @@ namespace ArcheCore.Client.Networking
             // Anything queued while we drain goes to the back and is drained here too.
             while (Pending.Count > 0)
                 Run(Pending.Dequeue());
+        }
+
+        /// <summary>A disconnect arrived during the load - go there instead of flushing.</summary>
+        private static bool TryHandleReturn()
+        {
+            if (_returnScene == null)
+                return false;
+
+            string scene = _returnScene;
+            _returnScene = null;
+            _loading = false;
+            Pending.Clear();
+
+            SceneManager.LoadScene(scene);
+            return true;
         }
 
         private static void Run(Action action)
