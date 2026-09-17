@@ -93,6 +93,9 @@ namespace ArcheCore.Client.Networking
                 return;
             }
 
+            // Server tick numbers restart with each connection.
+            W2CWorldSnapshotHandler.Reset();
+
             client.Connect(ip, 7777, "MMO");
         }
         private void OnDestroy()
@@ -134,6 +137,10 @@ namespace ArcheCore.Client.Networking
             
             dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
             dispatcher.Register(Opcodes.PlayerSpawned, new W2CCharacterDataHandler());
+
+            // Batched movement snapshots (opcode 30). This is now the ONLY way
+            // the server sends other players' movement.
+            dispatcher.Register(Opcodes.W2CWorldSnapshot, new W2CWorldSnapshotHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
