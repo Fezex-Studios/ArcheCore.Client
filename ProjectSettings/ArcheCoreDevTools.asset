@@ -12,11 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp-Editor:ArcheCore.Editor:ArcheCoreDevToolsSettings
+  plaintextDbPath: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/clientside_dev_db/_oggamedata.db
+  encryptedDbDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/encrypted_db_output
+  decryptedDbOutputDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/decrypted_db_output
   serverPatchDir: 
-  plaintextDbPath: 
-  encryptedDbDir: 
-  decryptedDbOutputDir: 
-  worldServerDbPath: 
-  lastDbTarget: ClientGameData
-  lastCustomDbPath: 
-  lastSelectedTable: 
+  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/Data/worldserver.db
