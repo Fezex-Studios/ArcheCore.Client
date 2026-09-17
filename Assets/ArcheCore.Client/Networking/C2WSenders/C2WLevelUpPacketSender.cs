@@ -9,10 +9,13 @@ namespace ArcheCore.Client.Networking.C2W
     {
         public static void Send(NetPeer peer)
         {
+            if (peer == null)
+                return;
+
             ClientPacketSender.SendPacket(
                 peer,
                 Opcodes.LevelUp,
-                new AdminC2WLevelUpPacket());
+                new C2WLevelUpPacket());
         }
     }
 }
