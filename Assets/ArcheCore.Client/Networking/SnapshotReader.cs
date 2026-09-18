@@ -18,10 +18,19 @@ namespace ArcheCore.Client.Networking
     /// per-packet cap this tick. Despawn only ever arrives on the reliable
     /// W2CPlayerLeave / W2CNpcDespawn channel. Treating absence as despawn
     /// will make distant players blink in and out constantly.
+    ///
+    /// ENTRIES ARE VARIABLE LENGTH. 12 bytes normally, 15 when the Velocity
+    /// flag is set, which the server only does for near-tier entities. The
+    /// flags byte is the only thing that says which - so the advance of
+    /// `offset` MUST be driven by the flags, not by a constant. Getting
+    /// this wrong doesn't throw; it silently misreads every remaining entry
+    /// in the packet as garbage positions, which looks like other players
+    /// teleporting to the edge of the world.
     /// </summary>
     public static class SnapshotReader
     {
         private const float PositionScale = 64f;
+        private const float VelocityScale = 4f;
         private const int HeaderSize = 20;
 
         [Flags]
@@ -31,19 +40,31 @@ namespace ArcheCore.Client.Networking
             Position = 1 << 0,
             Yaw      = 1 << 1,
             IsNpc    = 1 << 2,
+            Velocity = 1 << 3,
         }
 
         public readonly struct Entry
         {
             public readonly int     NetworkId;
             public readonly Vector3 Position;
+
+            /// <summary>
+            /// World units per second, or zero when the server didn't send
+            /// it (mid/far LOD tiers). Zero is indistinguishable from
+            /// "genuinely stationary" here, and that's fine: both mean
+            /// "don't extrapolate this entity anywhere."
+            /// </summary>
+            public readonly Vector3 Velocity;
+
+            /// <summary>Facing, in RADIANS (matches EntityStateCodec).</summary>
             public readonly float   Yaw;
             public readonly bool    IsNpc;
 
-            public Entry(int id, Vector3 pos, float yaw, bool isNpc)
+            public Entry(int id, Vector3 pos, Vector3 velocity, float yaw, bool isNpc)
             {
                 NetworkId = id;
                 Position  = pos;
+                Velocity  = velocity;
                 Yaw       = yaw;
                 IsNpc     = isNpc;
             }
@@ -53,8 +74,8 @@ namespace ArcheCore.Client.Networking
 
         /// <summary>
         /// Decodes in place and invokes the handler per entity. No
-        /// allocation, no intermediate list - this runs 10x a second with
-        /// up to ~100 entries and lives on the Unity main thread.
+        /// allocation, no intermediate list - this runs at tick rate with
+        /// up to ~60 entries and lives on the Unity main thread.
         /// The opcode is assumed already consumed by the dispatcher.
         /// </summary>
         public static void Read(ReadOnlySpan<byte> payload, EntryHandler onEntry)
@@ -84,6 +105,7 @@ namespace ArcheCore.Client.Networking
                 offset += 5;
 
                 var position = Vector3.zero;
+                var velocity = Vector3.zero;
                 var yaw = 0f;
 
                 if ((flags & EntryFlags.Position) != 0)
@@ -106,7 +128,22 @@ namespace ArcheCore.Client.Networking
                     offset += 1;
                 }
 
-                var entry = new Entry(id, position, yaw, (flags & EntryFlags.IsNpc) != 0);
+                if ((flags & EntryFlags.Velocity) != 0)
+                {
+                    if (offset + 3 > payload.Length) break;
+
+                    // Signed bytes. The cast from byte is unchecked by
+                    // default in C#, which is what we want - 0xFF has to
+                    // come back as -1, not 255.
+                    velocity = new Vector3(
+                        (sbyte)payload[offset]     / VelocityScale,
+                        (sbyte)payload[offset + 1] / VelocityScale,
+                        (sbyte)payload[offset + 2] / VelocityScale);
+
+                    offset += 3;
+                }
+
+                var entry = new Entry(id, position, velocity, yaw, (flags & EntryFlags.IsNpc) != 0);
                 onEntry(in entry, tick);
             }
         }

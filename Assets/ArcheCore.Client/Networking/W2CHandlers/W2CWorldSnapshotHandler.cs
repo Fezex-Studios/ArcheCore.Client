@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ArcheCore.Client.Gameplay;
 using ArcheCore.Network.Client;
 using LiteNetLib;
+using UnityEngine;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -56,6 +57,10 @@ namespace ArcheCore.Client.Networking.W2C
             if (network != null && entry.NetworkId == network.LocalNetworkId)
                 return; // never move the local player from the server
 
+            // The wire carries yaw in radians (EntityStateCodec); the
+            // interpolator and everything else Unity-side is degrees.
+            float yawDegrees = entry.Yaw * Mathf.Rad2Deg;
+
             if (entry.IsNpc)
             {
                 var npcs = NpcRegistry.Instance;
@@ -67,7 +72,7 @@ namespace ArcheCore.Client.Networking.W2C
                 }
 
                 LastTick[entry.NetworkId] = tick;
-                npcs.UpdatePosition(entry.NetworkId, entry.Position);
+                npcs.ApplyNetworkState(entry.NetworkId, entry.Position, entry.Velocity, yawDegrees);
             }
             else
             {
@@ -79,7 +84,7 @@ namespace ArcheCore.Client.Networking.W2C
                 }
 
                 LastTick[entry.NetworkId] = tick;
-                players.UpdatePosition(entry.NetworkId, entry.Position);
+                players.ApplyNetworkState(entry.NetworkId, entry.Position, entry.Velocity, yawDegrees);
             }
         }
     }

@@ -29,10 +29,18 @@ namespace ArcheCore.Client.Gameplay
         public bool TryGetNpc(int networkId, out NpcIdentity npc) =>
             _npcs.TryGetValue(networkId, out npc);
 
+        /// <summary>Legacy W2CNpcPosition path - position only, no velocity.</summary>
         public void UpdatePosition(int networkId, Vector3 position)
         {
             if (_npcs.TryGetValue(networkId, out var npc))
                 npc.SetTargetPosition(position);
+        }
+
+        /// <param name="yawDegrees">Facing in degrees (the wire carries radians).</param>
+        public void ApplyNetworkState(int networkId, Vector3 position, Vector3 velocity, float yawDegrees)
+        {
+            if (_npcs.TryGetValue(networkId, out var npc))
+                npc.ApplyNetworkState(position, velocity, yawDegrees);
         }
 
         public void Despawn(int networkId)

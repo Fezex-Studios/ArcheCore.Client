@@ -22,33 +22,81 @@ namespace ArchCore.Client
 
         private CharacterController _cc;
         private Vector3 _velocity;
-        private Vector3 _targetPosition;
         private MMOCamera _mmoCamera;
+
+        /// <summary>
+        /// Remote players only. Owns position and facing for anyone who
+        /// isn't us; see RemoteEntityInterpolator for why the old
+        /// lerp-toward-target in this class was replaced.
+        /// </summary>
+        private RemoteEntityInterpolator _interpolator;
 
         private float _sendTimer;
         private const float SendRate = 0.05f;
 
+        /// <summary>
+        /// Below this horizontal speed we consider the character stopped.
+        /// Deliberately not zero - CharacterController.velocity carries
+        /// tiny residuals from ground friction and slope resolution, and
+        /// treating those as movement means never sending the stop packet.
+        /// </summary>
+        private const float StoppedSpeedThreshold = 0.05f;
+
+        /// <summary>
+        /// Send an update for rotation alone past this many degrees of
+        /// change. Players turn on the spot constantly - to face a target,
+        /// to look at something - and with a movement-gated send that
+        /// rotation never reaches anyone. This is rate-limited by SendRate
+        /// like everything else.
+        /// </summary>
+        private const float YawSendThresholdDegrees = 4f;
+
+        private bool  _wasMoving;
+        private float _lastSentYaw;
 
         private Vector3? _autoMoveTarget;
         private float _autoMoveStopDistance;
 
         private void Start()
         {
-            _targetPosition = transform.position;
             _cc = GetComponent<CharacterController>();
 
             if (isLocalPlayer)
             {
                 _mmoCamera = Object.FindFirstObjectByType<MMOCamera>();
+                _lastSentYaw = transform.eulerAngles.y;
+
+                // A local player is driven by input, never by the server.
+                // If an interpolator ended up on the prefab, make sure it
+                // isn't also writing transform.position - two things
+                // fighting over the transform produces a jitter that looks
+                // exactly like a network problem and isn't one.
+                var stray = GetComponent<RemoteEntityInterpolator>();
+                if (stray != null)
+                    stray.enabled = false;
+            }
+            else
+            {
+                // Added at runtime rather than required on the prefab, so
+                // this drops in without touching any prefab assets.
+                _interpolator = GetComponent<RemoteEntityInterpolator>();
+                if (_interpolator == null)
+                    _interpolator = gameObject.AddComponent<RemoteEntityInterpolator>();
+
+                // Players send real yaw - they can face the camera while
+                // strafing, or turn while standing still, and deriving
+                // facing from movement would get both wrong.
+                _interpolator.DeriveYawFromMotion = false;
+                _interpolator.Initialize(transform.position, transform.eulerAngles.y);
             }
         }
 
         private void Update()
         {
+            // Remote players are entirely the interpolator's business now.
+            // There is no HandleRemoteMovement anymore.
             if (isLocalPlayer)
                 HandleLocalMovement();
-            else
-                HandleRemoteMovement();
         }
 
         private void HandleLocalMovement()
@@ -164,19 +212,84 @@ namespace ArchCore.Client
             // Move character
             _cc.Move(move * Time.deltaTime);
 
-            // Send network updates
+            SendMovementIfNeeded(grounded);
+        }
+
+        /// <summary>
+        /// Decides whether this frame's state needs to go to the server.
+        ///
+        /// The old rule was "every SendRate seconds, if we're moving." That
+        /// misses two things the observers need:
+        ///
+        ///   - THE STOP. If the last thing you send is a moving update, the
+        ///     server's snapshot dispatcher goes quiet (a stationary entity
+        ///     has nothing to report), and every observer is left holding a
+        ///     position with a non-zero velocity attached to it. They
+        ///     extrapolate you forward past where you actually stopped and
+        ///     get no correction, because you're not sending anymore. One
+        ///     explicit zero-velocity packet on the moving->stopped edge
+        ///     fixes it; without it, extrapolation makes things worse than
+        ///     no extrapolation.
+        ///   - ROTATION WITHOUT MOVEMENT. Turning on the spot changes
+        ///     nothing about position, so a movement-gated send never
+        ///     reports it, and other players see you frozen mid-turn.
+        /// </summary>
+        private void SendMovementIfNeeded(bool grounded)
+        {
+            // CharacterController.velocity is the velocity that was
+            // actually APPLIED after collision resolution, which is what
+            // observers should extrapolate along - not the input vector we
+            // asked for. They differ whenever you're sliding along a wall,
+            // and the applied one is the truthful answer.
+            Vector3 netVelocity = _cc.velocity;
+
+            // Zero the grounded residual. CharacterController reports a
+            // constant small downward velocity while grounded (the -2f we
+            // feed it to keep it pinned to the floor). Shipping that means
+            // every observer extrapolates standing players slowly into the
+            // terrain during any gap between updates.
+            if (grounded)
+                netVelocity.y = 0f;
+
+            Vector3 horizontal = new Vector3(netVelocity.x, 0f, netVelocity.z);
+            bool isMoving = horizontal.sqrMagnitude > StoppedSpeedThreshold * StoppedSpeedThreshold;
+
+            float yaw = transform.eulerAngles.y;
+            bool yawChanged = Mathf.Abs(Mathf.DeltaAngle(yaw, _lastSentYaw)) >= YawSendThresholdDegrees;
+
             _sendTimer += Time.deltaTime;
 
-            if (_sendTimer >= SendRate &&
-                move.sqrMagnitude > 0.001f)
+            // The stop edge. Sent immediately rather than waiting out the
+            // rate limit - up to 50ms of observers extrapolating you past
+            // your own stopping point is exactly the overshoot this exists
+            // to prevent.
+            if (_wasMoving && !isMoving)
             {
-                _sendTimer = 0f;
-
-                C2WPlayerMovePacketSender.Send(
-                    ClientNetwork.Instance.ServerPeer,
-                    transform.position
-                );
+                _wasMoving = false;
+                Send(Vector3.zero, yaw);
+                return;
             }
+
+            if (_sendTimer < SendRate)
+                return;
+
+            if (!isMoving && !yawChanged)
+                return;
+
+            _wasMoving = isMoving;
+            Send(isMoving ? netVelocity : Vector3.zero, yaw);
+        }
+
+        private void Send(Vector3 velocity, float yawDegrees)
+        {
+            _sendTimer = 0f;
+            _lastSentYaw = yawDegrees;
+
+            C2WPlayerMovePacketSender.Send(
+                ClientNetwork.Instance.ServerPeer,
+                transform.position,
+                velocity,
+                yawDegrees * Mathf.Deg2Rad);
         }
 
         public void SetAutoMoveTarget(Vector3 target, float stopDistance)
@@ -190,19 +303,24 @@ namespace ArchCore.Client
             _autoMoveTarget = null;
         }
 
-        private void HandleRemoteMovement()
-        {
-            transform.position = Vector3.Lerp(
-                transform.position,
-                _targetPosition,
-                Time.deltaTime * 10f
-            );
-        }
-
+        /// <summary>
+        /// Kept for the legacy W2CPlayerPosition path, which carries no
+        /// velocity or facing. Prefer ApplyNetworkState.
+        /// </summary>
         public void SetTargetPosition(Vector3 position)
         {
-            _targetPosition = position;
+            ApplyNetworkState(position, Vector3.zero, transform.eulerAngles.y);
         }
+
+        /// <param name="yawDegrees">Facing in degrees - callers convert from the wire's radians.</param>
+        public void ApplyNetworkState(Vector3 position, Vector3 velocity, float yawDegrees)
+        {
+            if (isLocalPlayer || _interpolator == null)
+                return;
+
+            _interpolator.ApplyUpdate(position, velocity, yawDegrees);
+        }
+
         private void OnDrawGizmos()
         {
             Vector3 pos = transform.position;

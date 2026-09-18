@@ -16,4 +16,4 @@ MonoBehaviour:
   encryptedDbDir: 
   decryptedDbOutputDir: 
   serverPatchDir: 
-  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/bin/Debug/net10.0/Data/worldserver.db
+  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/Data/worldserver.db
