@@ -9,11 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 0273ebcb3bd6416ba0489e271036451a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp-Editor:ArcheCore.Editor:ArcheCoreDevToolsSettings
-  plaintextDbPath: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/clientside_dev_db/_oggamedata.db
-  encryptedDbDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/encrypted_db_output
-  decryptedDbOutputDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/decrypted_db_output
+  m_EditorClassIdentifier: Assembly-CSharp-Editor::ArcheCore.Editor.ArcheCoreDevToolsSettings
+  plaintextDbPath: 
+  encryptedDbDir: 
+  decryptedDbOutputDir: 
   serverPatchDir: 
-  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/Data/worldserver.db
+  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/bin/Debug/net10.0/Data/worldserver.db
