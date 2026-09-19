@@ -37,10 +37,13 @@ namespace ArcheCore.Client.Gameplay
         }
 
         /// <param name="yawDegrees">Facing in degrees (the wire carries radians).</param>
-        public void ApplyNetworkState(int networkId, Vector3 position, Vector3 velocity, float yawDegrees)
+        public void ApplyNetworkState(
+            int networkId, Vector3 position, Vector3 velocity,
+            float yawDegrees, float pitchDegrees, float rollDegrees,
+            ArcheCore.Network.Shared.MovementState state)
         {
             if (_npcs.TryGetValue(networkId, out var npc))
-                npc.ApplyNetworkState(position, velocity, yawDegrees);
+                npc.ApplyNetworkState(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
         }
 
         public void Despawn(int networkId)

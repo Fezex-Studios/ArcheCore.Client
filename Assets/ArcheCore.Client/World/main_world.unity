@@ -3377,13 +3377,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 48648b81f2d44924d9aadfbdc99f693f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.Gameplay.MMOCamera
+  fallbackTarget: {fileID: 0}
+  pivotHeight: 1.6
   distance: 6
   minDistance: 2
   maxDistance: 15
-  zoomSpeed: 2
-  mouseSensitivity: 3
+  zoomStep: 0.8
+  zoomDamping: 14
+  mouseSensitivity: 0.5
   minPitch: -20
   maxPitch: 60
+  autoAlignSpeed: 0
+  autoAlignMinSpeed: 0.5
+  autoAlignDelay: 0.6
+  firstPersonThreshold: 0.4
+  avoidOcclusion: 1
+  occlusionMask:
+    serializedVersion: 2
+    m_Bits: 119
+  occlusionRadius: 0.3
+  occlusionReturnSpeed: 5
 --- !u!1 &541792332
 GameObject:
   m_ObjectHideFlags: 0

@@ -1473,6 +1473,7 @@ GameObject:
   - component: {fileID: 942418891}
   - component: {fileID: 942418890}
   - component: {fileID: 942418893}
+  - component: {fileID: 942418894}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1693,6 +1694,41 @@ MonoBehaviour:
       data1: 0
       data2: 0
   defaultFrameSettings: 0
+--- !u!114 &942418894
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 942418889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48648b81f2d44924d9aadfbdc99f693f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.Gameplay.MMOCamera
+  fallbackTarget: {fileID: 0}
+  pivotHeight: 1.6
+  distance: 6
+  minDistance: 0
+  maxDistance: 20
+  zoomStep: 0.8
+  zoomDamping: 14
+  mouseSensitivity: 0.15
+  verticalSensitivityScale: 1
+  invertY: 0
+  minPitch: -25
+  maxPitch: 80
+  autoAlignSpeed: 3
+  autoAlignMinSpeed: 0.5
+  autoAlignDelay: 0.6
+  firstPersonThreshold: 0.4
+  avoidOcclusion: 1
+  occlusionMask:
+    serializedVersion: 2
+    m_Bits: 119
+  occlusionRadius: 0.25
+  occlusionReturnSpeed: 5
+  dragThresholdPixels: 4
 --- !u!1 &944414007
 GameObject:
   m_ObjectHideFlags: 0
@@ -3559,7 +3595,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c63e2193cc3c4adba02379becafcd89d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.Networking.ClientNetwork
-  editorToken: 41986baf-4aba-44eb-a2ad-47e9c8006ddc
+  editorToken: 5f0a48fa-0f5a-4c50-ae1b-685a8b9e9b5f
 --- !u!4 &2015394151
 Transform:
   m_ObjectHideFlags: 0

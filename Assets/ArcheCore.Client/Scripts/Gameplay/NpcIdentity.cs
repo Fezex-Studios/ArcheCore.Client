@@ -57,8 +57,11 @@ public class NpcIdentity : MonoBehaviour
     }
 
     /// <param name="yawDegrees">Facing in degrees (the wire carries radians).</param>
-    public void ApplyNetworkState(Vector3 position, Vector3 velocity, float yawDegrees)
+    public void ApplyNetworkState(
+        Vector3 position, Vector3 velocity,
+        float yawDegrees, float pitchDegrees, float rollDegrees,
+        ArcheCore.Network.Shared.MovementState state)
     {
-        _interpolator.ApplyUpdate(position, velocity, yawDegrees);
+        _interpolator.ApplyUpdate(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
     }
 }

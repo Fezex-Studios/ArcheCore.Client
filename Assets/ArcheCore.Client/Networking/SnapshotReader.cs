@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
+using ArcheCore.Network.Shared;
 using UnityEngine;
 
 namespace ArcheCore.Client.Networking
@@ -19,13 +20,15 @@ namespace ArcheCore.Client.Networking
     /// W2CPlayerLeave / W2CNpcDespawn channel. Treating absence as despawn
     /// will make distant players blink in and out constantly.
     ///
-    /// ENTRIES ARE VARIABLE LENGTH. 12 bytes normally, 15 when the Velocity
-    /// flag is set, which the server only does for near-tier entities. The
-    /// flags byte is the only thing that says which - so the advance of
-    /// `offset` MUST be driven by the flags, not by a constant. Getting
-    /// this wrong doesn't throw; it silently misreads every remaining entry
-    /// in the packet as garbage positions, which looks like other players
-    /// teleporting to the edge of the world.
+    /// ENTRIES ARE VARIABLE LENGTH. 13 bytes base, +3 if Velocity is set
+    /// (near-tier entities only), +2 if Tilt is (non-upright entities
+    /// only). The flags byte is the only thing that says which - so the
+    /// advance of `offset` MUST be driven by the flags, not by a constant,
+    /// and the optional blocks must be read in the same ORDER the writer
+    /// wrote them (velocity, then tilt). Getting either wrong doesn't
+    /// throw; it silently misreads every remaining entry in the packet as
+    /// garbage positions, which looks like other players teleporting to the
+    /// edge of the world.
     /// </summary>
     public static class SnapshotReader
     {
@@ -41,6 +44,7 @@ namespace ArcheCore.Client.Networking
             Yaw      = 1 << 1,
             IsNpc    = 1 << 2,
             Velocity = 1 << 3,
+            Tilt     = 1 << 4,
         }
 
         public readonly struct Entry
@@ -58,14 +62,26 @@ namespace ArcheCore.Client.Networking
 
             /// <summary>Facing, in RADIANS (matches EntityStateCodec).</summary>
             public readonly float   Yaw;
+
+            /// <summary>Nose up/down and bank, in RADIANS. Zero when the
+            /// server judged the entity upright and skipped the bytes.</summary>
+            public readonly float   Pitch;
+            public readonly float   Roll;
+
+            /// <summary>What the entity is doing. Always present.</summary>
+            public readonly MovementState State;
+
             public readonly bool    IsNpc;
 
-            public Entry(int id, Vector3 pos, Vector3 velocity, float yaw, bool isNpc)
+            public Entry(int id, Vector3 pos, Vector3 velocity, float yaw, float pitch, float roll, MovementState state, bool isNpc)
             {
                 NetworkId = id;
                 Position  = pos;
                 Velocity  = velocity;
                 Yaw       = yaw;
+                Pitch     = pitch;
+                Roll      = roll;
+                State     = state;
                 IsNpc     = isNpc;
             }
         }
@@ -107,6 +123,9 @@ namespace ArcheCore.Client.Networking
                 var position = Vector3.zero;
                 var velocity = Vector3.zero;
                 var yaw = 0f;
+                var pitch = 0f;
+                var roll = 0f;
+                var state = MovementState.None;
 
                 if ((flags & EntryFlags.Position) != 0)
                 {
@@ -128,6 +147,12 @@ namespace ArcheCore.Client.Networking
                     offset += 1;
                 }
 
+                // Always present - not flag-gated. See MovementState for
+                // why it can't be sent only on change.
+                if (offset + 1 > payload.Length) break;
+                state = (MovementState)payload[offset];
+                offset += 1;
+
                 if ((flags & EntryFlags.Velocity) != 0)
                 {
                     if (offset + 3 > payload.Length) break;
@@ -143,7 +168,18 @@ namespace ArcheCore.Client.Networking
                     offset += 3;
                 }
 
-                var entry = new Entry(id, position, velocity, yaw, (flags & EntryFlags.IsNpc) != 0);
+                // Tilt AFTER velocity - same order as SnapshotWriter.
+                if ((flags & EntryFlags.Tilt) != 0)
+                {
+                    if (offset + 2 > payload.Length) break;
+                    pitch = payload[offset]     / 256f * (Mathf.PI * 2f);
+                    roll  = payload[offset + 1] / 256f * (Mathf.PI * 2f);
+                    offset += 2;
+                }
+
+                var entry = new Entry(
+                    id, position, velocity, yaw, pitch, roll, state,
+                    (flags & EntryFlags.IsNpc) != 0);
                 onEntry(in entry, tick);
             }
         }

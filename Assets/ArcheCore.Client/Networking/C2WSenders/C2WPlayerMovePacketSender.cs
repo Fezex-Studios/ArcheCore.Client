@@ -1,4 +1,5 @@
 ﻿using ArcheCore.Library.Net.Worldserver;
+using ArcheCore.Network.Shared;
 using ArcheCore.Network.Shared.Packets.C2W;
 using ArcheCore.Network.Worldserver;
 using LiteNetLib;
@@ -17,17 +18,20 @@ namespace ArcheCore.Client.Networking.C2WSenders
         /// caller sends a real zero when the character stops rather than
         /// simply going quiet.
         /// </param>
-        /// <param name="yawRadians">
-        /// Facing, in RADIANS. Unity is degrees everywhere else; the
-        /// conversion happens at the call site because the wire format
-        /// (EntityStateCodec.QuantizeYaw) is radians and doing it here
-        /// would hide the unit change from the caller.
+        /// <param name="eulerDegrees">
+        /// The character's full rotation in Unity's own units and order
+        /// (x = pitch, y = yaw, z = roll, degrees). Converted to radians
+        /// here because the wire format is radians throughout
+        /// (EntityStateCodec), and doing it in one place beats three
+        /// Mathf.Deg2Rad at the call site with one of them eventually
+        /// missing.
         /// </param>
         public static void Send(
             NetPeer peer,
             Vector3 position,
             Vector3 velocity,
-            float yawRadians)
+            Vector3 eulerDegrees,
+            MovementState state)
         {
             if (peer == null)
                 return;
@@ -43,7 +47,10 @@ namespace ArcheCore.Client.Networking.C2WSenders
                     vx = velocity.x,
                     vy = velocity.y,
                     vz = velocity.z,
-                    yaw = yawRadians
+                    yaw   = eulerDegrees.y * Mathf.Deg2Rad,
+                    pitch = eulerDegrees.x * Mathf.Deg2Rad,
+                    roll  = eulerDegrees.z * Mathf.Deg2Rad,
+                    state = (byte)state
                 },
                 DeliveryMethod.Unreliable);
         }

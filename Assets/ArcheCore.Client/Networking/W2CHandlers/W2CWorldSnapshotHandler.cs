@@ -59,7 +59,9 @@ namespace ArcheCore.Client.Networking.W2C
 
             // The wire carries yaw in radians (EntityStateCodec); the
             // interpolator and everything else Unity-side is degrees.
-            float yawDegrees = entry.Yaw * Mathf.Rad2Deg;
+            float yawDegrees   = entry.Yaw   * Mathf.Rad2Deg;
+            float pitchDegrees = entry.Pitch * Mathf.Rad2Deg;
+            float rollDegrees  = entry.Roll  * Mathf.Rad2Deg;
 
             if (entry.IsNpc)
             {
@@ -72,7 +74,9 @@ namespace ArcheCore.Client.Networking.W2C
                 }
 
                 LastTick[entry.NetworkId] = tick;
-                npcs.ApplyNetworkState(entry.NetworkId, entry.Position, entry.Velocity, yawDegrees);
+                npcs.ApplyNetworkState(
+                    entry.NetworkId, entry.Position, entry.Velocity,
+                    yawDegrees, pitchDegrees, rollDegrees, entry.State);
             }
             else
             {
@@ -84,7 +88,9 @@ namespace ArcheCore.Client.Networking.W2C
                 }
 
                 LastTick[entry.NetworkId] = tick;
-                players.ApplyNetworkState(entry.NetworkId, entry.Position, entry.Velocity, yawDegrees);
+                players.ApplyNetworkState(
+                    entry.NetworkId, entry.Position, entry.Velocity,
+                    yawDegrees, pitchDegrees, rollDegrees, entry.State);
             }
         }
     }

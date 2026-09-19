@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using ArcheCore.Network.Shared;
+using UnityEngine;
 
 namespace ArcheCore.Client.Gameplay
 {
@@ -95,6 +96,26 @@ namespace ArcheCore.Client.Gameplay
         /// </summary>
         [SerializeField] private float maxExtrapolation = 0.25f;
 
+        /// <summary>
+        /// How long to spend easing back from a spent extrapolation to the
+        /// last position actually received.
+        ///
+        /// Without this the extrapolated guess is permanent. Clamping
+        /// overtime at maxExtrapolation stops the character travelling
+        /// further, but it leaves it parked at the end of a prediction that
+        /// has since been proven wrong, with nothing to bring it back - the
+        /// only thing that can is the next packet, and there may not be
+        /// one. A character that jumps, lands, and then stands still sends
+        /// its last update mid-fall if the landing packet is lost; every
+        /// observer then predicts it a quarter-second further down and
+        /// leaves it there, under the floor, indefinitely.
+        ///
+        /// Easing back to the last KNOWN position is the correct recovery,
+        /// because after the extrapolation window has expired the
+        /// prediction is the guess and _to is the evidence.
+        /// </summary>
+        [SerializeField] private float extrapolationUnwind = 0.3f;
+
         [Header("Correction")]
 
         /// <summary>
@@ -123,6 +144,8 @@ namespace ArcheCore.Client.Gameplay
         private Vector3 _to;
         private Vector3 _velocity;
         private float   _targetYawDegrees;
+        private float   _targetPitchDegrees;
+        private float   _targetRollDegrees;
 
         private float _timer;
         private float _interval = 0.1f;
@@ -131,6 +154,20 @@ namespace ArcheCore.Client.Gameplay
 
         public Vector3 TargetPosition => _to;
         public Vector3 Velocity       => _velocity;
+
+        /// <summary>
+        /// What the server says this entity is doing. Nothing here consumes
+        /// it - it's exposed for an Animator driver to read, which is the
+        /// entire reason the byte is on the wire. Until something reads
+        /// this, remote characters are correctly positioned and correctly
+        /// oriented and still T-posing.
+        /// </summary>
+        public MovementState State { get; private set; }
+
+        /// <summary>Raised when State changes, for animation triggers that
+        /// care about the transition (jump start, landing) rather than the
+        /// steady state.</summary>
+        public event System.Action<MovementState, MovementState> StateChanged;
 
         /// <summary>
         /// Place the entity with no interpolation. Call on spawn, so the
@@ -145,6 +182,8 @@ namespace ArcheCore.Client.Gameplay
             _from = _to = position;
             _velocity = Vector3.zero;
             _targetYawDegrees = yawDegrees;
+            _targetPitchDegrees = 0f;
+            _targetRollDegrees = 0f;
             _timer = 0f;
             _lastArrivalTime = -1f;
             _initialized = true;
@@ -156,8 +195,30 @@ namespace ArcheCore.Client.Gameplay
         /// Unity is degrees and doing it here would mean one more place to
         /// get the unit wrong.
         /// </param>
-        public void ApplyUpdate(Vector3 position, Vector3 velocity, float yawDegrees)
+        public void ApplyUpdate(Vector3 position, Vector3 velocity, float yawDegrees) =>
+            ApplyUpdate(position, velocity, yawDegrees, 0f, 0f, State);
+
+        /// <param name="pitchDegrees">Nose up/down. Zero for upright entities.</param>
+        /// <param name="rollDegrees">Bank. Zero for upright entities.</param>
+        /// <param name="state">What the entity is doing - see MovementState.</param>
+        public void ApplyUpdate(
+            Vector3 position,
+            Vector3 velocity,
+            float yawDegrees,
+            float pitchDegrees,
+            float rollDegrees,
+            MovementState state)
         {
+            if (state != State)
+            {
+                var previous = State;
+                State = state;
+                StateChanged?.Invoke(previous, state);
+            }
+
+            _targetPitchDegrees = pitchDegrees;
+            _targetRollDegrees = rollDegrees;
+
             if (!_initialized)
             {
                 Initialize(position, yawDegrees);
@@ -228,11 +289,26 @@ namespace ArcheCore.Client.Gameplay
                 // Overdue. Predict forward along the last known velocity,
                 // bounded - see maxExtrapolation. A stopped entity reports
                 // zero velocity, so this correctly holds it still rather
-                // than drifting it onward, which is exactly why the client
-                // has to send that final zero-velocity packet when it
-                // stops moving.
-                float overtime = Mathf.Min(_timer - _interval, maxExtrapolation);
-                transform.position = _to + _velocity * overtime;
+                // than drifting it onward, which is why the client has to
+                // send that final zero-velocity packet when it stops.
+                float overtime = _timer - _interval;
+
+                if (overtime <= maxExtrapolation)
+                {
+                    transform.position = _to + _velocity * overtime;
+                }
+                else
+                {
+                    // Budget spent and still nothing new. Ease back to the
+                    // last position actually received rather than sitting
+                    // on a stale guess forever - see extrapolationUnwind.
+                    Vector3 predicted = _to + _velocity * maxExtrapolation;
+                    float t = extrapolationUnwind <= 0f
+                        ? 1f
+                        : Mathf.Clamp01((overtime - maxExtrapolation) / extrapolationUnwind);
+
+                    transform.position = Vector3.Lerp(predicted, _to, t);
+                }
             }
 
             ApplyRotation();
@@ -259,9 +335,13 @@ namespace ArcheCore.Client.Gameplay
                 targetYaw = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
             }
 
+            // Pitch and roll go in alongside yaw rather than being slerped
+            // separately - three independent interpolations on the same
+            // transform fight each other, because each writes the whole
+            // rotation. One target quaternion, one slerp.
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
-                Quaternion.Euler(0f, targetYaw, 0f),
+                Quaternion.Euler(_targetPitchDegrees, targetYaw, _targetRollDegrees),
                 Time.deltaTime * yawTurnSpeed);
         }
     }

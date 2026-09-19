@@ -162,6 +162,9 @@ namespace ArcheCore.Client.Networking
             // Batched movement snapshots (opcode 30) - the only way the server
             // sends other players' movement.
             dispatcher.Register(Opcodes.W2CWorldSnapshot, new W2CWorldSnapshotHandler());
+            
+            
+            dispatcher.Register(Opcodes.W2CPositionCorrection, new W2CPositionCorrectionHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
