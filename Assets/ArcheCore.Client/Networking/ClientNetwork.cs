@@ -170,6 +170,7 @@ namespace ArcheCore.Client.Networking
             
             dispatcher.Register(Opcodes.W2CPositionCorrection, new W2CPositionCorrectionHandler());
             dispatcher.Register(Opcodes.W2CJumpEvent,          new W2CJumpEventHandler());
+            dispatcher.Register(Opcodes.W2CGoldUpdate,new W2CGoldUpdatehandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
