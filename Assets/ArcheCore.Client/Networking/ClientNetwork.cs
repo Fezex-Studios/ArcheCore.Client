@@ -41,6 +41,10 @@ namespace ArcheCore.Client.Networking
 
         private void Awake()
         {
+            Application.runInBackground = true;
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 120;
+
             if (Instance != null)
             {
                 Destroy(gameObject);
@@ -165,6 +169,7 @@ namespace ArcheCore.Client.Networking
             
             
             dispatcher.Register(Opcodes.W2CPositionCorrection, new W2CPositionCorrectionHandler());
+            dispatcher.Register(Opcodes.W2CJumpEvent,          new W2CJumpEventHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

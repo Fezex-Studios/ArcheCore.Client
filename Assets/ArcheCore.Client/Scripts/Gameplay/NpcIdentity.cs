@@ -60,8 +60,21 @@ public class NpcIdentity : MonoBehaviour
     public void ApplyNetworkState(
         Vector3 position, Vector3 velocity,
         float yawDegrees, float pitchDegrees, float rollDegrees,
-        ArcheCore.Network.Shared.MovementState state)
+        ArcheCore.Network.Shared.MovementState state, uint serverTick)
     {
-        _interpolator.ApplyUpdate(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
+        _interpolator.ApplyUpdate(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state, serverTick);
+    }
+
+    /// <summary>
+    /// Hand a jump takeoff to the interpolator, which integrates the arc
+    /// locally instead of waiting for position samples. See
+    /// RemoteEntityInterpolator.BeginJump.
+    /// </summary>
+    public void BeginJump(Vector3 origin, Vector3 horizontalVelocity, float verticalVelocity)
+    {
+        if (_interpolator == null)
+            return;
+
+        _interpolator.BeginJump(origin, horizontalVelocity, verticalVelocity);
     }
 }

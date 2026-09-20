@@ -1,213 +1,302 @@
-﻿using ArcheCore.Network.Shared;
+﻿using System.Collections.Generic;
+using ArcheCore.Network.Shared;
 using UnityEngine;
 
 namespace ArcheCore.Client.Gameplay
 {
     /// <summary>
     /// Renders a server-controlled entity smoothly between the discrete
-    /// position updates that actually arrive. Used by both remote players
-    /// and NPCs - the problem is identical for both, and having one
-    /// implementation means a fix to remote-player smoothness is
-    /// automatically a fix to NPC smoothness.
+    /// updates that actually arrive. Used by remote players and NPCs both.
     ///
-    /// REPLACES the old pattern, which was this, in every entity's Update:
+    /// SNAPSHOT BUFFER WITH FIXED DELAY
     ///
-    ///     transform.position = Vector3.Lerp(
-    ///         transform.position, _targetPosition, Time.deltaTime * 10f);
+    /// This is the approach Valve documented for Source and the one most
+    /// networked games use. It replaces a "measure the send rate, learn it,
+    /// extrapolate when overdue" design that failed for a specific and
+    /// instructive reason.
     ///
-    /// That is not interpolation. It's exponential decay toward a moving
-    /// point, and it's wrong in three separate ways that compound:
+    /// WHY THE OLD ONE FAILED
     ///
-    ///   1. It never arrives. Each frame it covers a fraction of the
-    ///      REMAINING distance, so the character is always behind, and
-    ///      visibly decelerates as it approaches each sample. A character
-    ///      running at constant speed should not look like it's easing into
-    ///      every waypoint.
-    ///   2. It's framerate dependent. `Time.deltaTime * 10f` is used as a
-    ///      lerp factor, but lerp factors aren't rates - at 144fps the
-    ///      character converges faster than at 30fps, so two players
-    ///      watching the same movement see it happen at different speeds.
-    ///   3. It has no idea when the next update is due, so it can't pace
-    ///      itself to arrive just as the next one lands, and it has nothing
-    ///      to do when one goes missing except keep decaying toward a stale
-    ///      point - which reads as the character stopping dead.
+    /// It timed updates as they ARRIVED and averaged that into a predicted
+    /// interval. Measured on a live two-client test, arrivals looked like:
     ///
-    /// What this does instead is the standard approach: render the entity
-    /// one update-interval in the PAST, moving at constant speed between
-    /// the last two known positions. Being slightly behind live is what
-    /// buys the smoothness; you trade a fixed ~50-100ms of latency on other
-    /// people's positions for motion with no stutter in it. Every MMO makes
-    /// this trade, including ArcheAge.
+    ///     150ms 154ms 147ms 159ms 389ms 152ms 601ms 149ms 469ms ...
     ///
-    /// The interval isn't a constant, because the server doesn't send at a
-    /// constant rate: SnapshotDispatcher's LOD tiers mean a nearby player
-    /// arrives every tick, a mid-range one every 3rd, a distant one every
-    /// 10th. So the interval is MEASURED per entity and smoothed. A player
-    /// walking toward you gets faster updates, this notices, and the
-    /// interpolation tightens automatically.
+    /// The server sends on a fixed schedule. That spread is pure network
+    /// jitter, and averaging it produces a number that is wrong in both
+    /// directions. Predict 150ms and a 600ms gap leaves the character with
+    /// 450ms of nothing to do: it extrapolates, runs out of budget, and
+    /// then eases BACKWARDS toward its last known position - a visible
+    /// lurch - before the real update arrives and throws it forward again.
     ///
-    /// When an update is late or lost - unavoidable, these are unreliable
-    /// packets - it extrapolates along the last known velocity rather than
-    /// freezing. That's bounded by MaxExtrapolation, because extrapolating
-    /// a character who actually stopped, or turned, for a full second
-    /// produces a visible rubber-band snap when the truth arrives. A short
-    /// extrapolation hides ordinary packet loss entirely; a long one trades
-    /// a freeze for a teleport, which is worse.
+    /// No constant fixes that. Raise the extrapolation budget and a
+    /// character who genuinely stopped overshoots instead. The design was
+    /// wrong, not the tuning.
+    ///
+    /// WHAT THIS DOES INSTEAD
+    ///
+    /// Every update is stored with its SERVER TICK, not its arrival time.
+    /// Ticks are evenly spaced by definition - the server emits them on a
+    /// fixed clock - so jitter disappears from the timeline entirely. A
+    /// packet that took 600ms to arrive still carries the tick it was
+    /// created on, and slots into its correct place in the buffer.
+    ///
+    /// Rendering then happens at (newest tick - delay), interpolating
+    /// between the two buffered samples that bracket that moment. Both are
+    /// real positions the server actually reported. Nothing is predicted,
+    /// so nothing needs correcting, so there is nothing to snap back from.
+    ///
+    /// THE TRADE
+    ///
+    /// You see other players a fixed ~200ms in the past. That is not a
+    /// defect, it's the payment: a CONSTANT delay is imperceptible, while
+    /// variable error is exactly what reads as lag. Every game making this
+    /// trade makes it for the same reason.
+    ///
+    /// The delay must exceed the gap between updates, or the buffer runs
+    /// dry and you are extrapolating again. Since the gap changes with LOD
+    /// tier - near every tick, mid every 3rd, far every 10th - the delay
+    /// ADAPTS: it tracks the largest recent tick gap for this entity and
+    /// keeps a margin above it. A player walking toward you tightens
+    /// automatically as their tier changes.
+    ///
+    /// EXTRAPOLATION STILL EXISTS, as a fallback only, for when the buffer
+    /// genuinely runs dry. In normal operation it never runs.
     /// </summary>
     public class RemoteEntityInterpolator : MonoBehaviour
     {
-        [Header("Interval learning")]
+        [Header("Buffer")]
 
         /// <summary>
-        /// Floor on the learned update interval. Below this the entity is
-        /// effectively live and there's nothing to interpolate across;
-        /// mostly this guards against a burst of updates arriving in the
-        /// same frame collapsing the interval to near zero, which would
-        /// make the next real gap look like a jump.
+        /// How far behind the newest received tick to render, in seconds,
+        /// as a FLOOR. The actual delay is this or (largest recent gap x
+        /// DelayGapMultiplier), whichever is larger.
+        ///
+        /// 0.1 is about two ticks at 20Hz. Enough to absorb a single
+        /// dropped near-tier packet without the buffer emptying.
         /// </summary>
-        [SerializeField] private float minInterval = 0.03f;
+        [SerializeField] private float minDelaySeconds = 0.1f;
 
         /// <summary>
-        /// Ceiling on the learned interval. Also the cutoff for what counts
-        /// as a usable sample at all - a gap longer than this means the
-        /// entity was standing still (the server stops sending for
-        /// stationary entities) or we had a dropout, and neither is
-        /// evidence that its update RATE changed. Feeding those into the
-        /// average would make a player who idled for ten seconds
-        /// interpolate their next step over half a second.
+        /// Ceiling on the adaptive delay. A far-tier entity updating every
+        /// 10th tick would otherwise push the delay past a second, and at
+        /// that point you are watching a noticeably stale character. Past
+        /// this, accept occasional extrapolation instead.
+        ///
+        /// CHANGED from 0.35 to 0.75. Two-client testing showed mid-tier
+        /// (30-80 units, every 3rd tick = ~150ms nominal) gaps regularly
+        /// reaching 250-800ms once phase spreading and the "stop packet"
+        /// gating in SnapshotDispatcher are accounted for - real gaps run
+        /// well above the nominal tier rate, not just occasionally but
+        /// routinely. At 0.35 the delay was pinned at the ceiling and
+        /// IsExtrapolating was true on a large fraction of frames even
+        /// during ordinary walking, which is exactly the "lurch and
+        /// correct" pattern this class exists to avoid. 0.75 comfortably
+        /// covers the measured mid-tier gap with the multiplier's margin
+        /// intact. This costs staleness (you see a mid-tier entity up to
+        /// ~0.75s behind instead of ~0.35s), which is the correct trade -
+        /// see the class remarks on why constant delay beats variable
+        /// error. Once the far tier (see SnapshotDispatcher.MidRange) is
+        /// re-enabled, re-measure; a real far tier may need this even
+        /// higher or a third, coarser delay band per LOD tier.
         /// </summary>
-        [SerializeField] private float maxInterval = 0.5f;
+        [SerializeField] private float maxDelaySeconds = 0.75f;
 
         /// <summary>
-        /// How fast the learned interval chases a new sample. Low, because
-        /// the rate genuinely does change (LOD tier crossings) but network
-        /// jitter makes individual samples noisy, and overreacting to one
-        /// early packet makes the next gap look like a stall.
+        /// Safety margin over the observed gap. 1.5 means "render far
+        /// enough back that one update can go missing entirely and the
+        /// buffer still has something to interpolate toward".
         /// </summary>
-        [SerializeField] private float intervalSmoothing = 0.25f;
-
-        [Header("Extrapolation")]
+        [SerializeField] private float delayGapMultiplier = 1.5f;
 
         /// <summary>
-        /// How far past the expected arrival time to keep predicting.
-        /// ~5 ticks at 20Hz. Long enough to cover ordinary loss invisibly,
-        /// short enough that the correction when the real position lands is
-        /// a nudge rather than a teleport.
+        /// Ring buffer size. 32 samples covers 1.6s of near-tier updates
+        /// or 16s of far-tier ones - far more than the delay will ever
+        /// reach back for, which is the point: the buffer should never be
+        /// the reason a sample is unavailable.
+        /// </summary>
+        private const int BufferCapacity = 32;
+
+        [Header("Fallback extrapolation")]
+
+        /// <summary>
+        /// Used ONLY when the buffer has run dry - render time is past the
+        /// newest sample. Short, because this path means the prediction is
+        /// unverified and every extra millisecond of it is more to correct.
         /// </summary>
         [SerializeField] private float maxExtrapolation = 0.25f;
-
-        /// <summary>
-        /// How long to spend easing back from a spent extrapolation to the
-        /// last position actually received.
-        ///
-        /// Without this the extrapolated guess is permanent. Clamping
-        /// overtime at maxExtrapolation stops the character travelling
-        /// further, but it leaves it parked at the end of a prediction that
-        /// has since been proven wrong, with nothing to bring it back - the
-        /// only thing that can is the next packet, and there may not be
-        /// one. A character that jumps, lands, and then stands still sends
-        /// its last update mid-fall if the landing packet is lost; every
-        /// observer then predicts it a quarter-second further down and
-        /// leaves it there, under the floor, indefinitely.
-        ///
-        /// Easing back to the last KNOWN position is the correct recovery,
-        /// because after the extrapolation window has expired the
-        /// prediction is the guess and _to is the evidence.
-        /// </summary>
-        [SerializeField] private float extrapolationUnwind = 0.3f;
 
         [Header("Correction")]
 
         /// <summary>
-        /// Past this distance, don't interpolate - teleport. Mounts,
-        /// respawns, GM teleports and long dropouts all produce legitimate
-        /// jumps, and sliding a character 200 units across the map at walk
-        /// speed looks far worse than a hard cut. Set this comfortably
-        /// above the furthest a character can plausibly travel in one
-        /// update interval.
+        /// Past this distance, teleport rather than slide. Mounts,
+        /// respawns and GM teleports all produce legitimate jumps, and
+        /// sliding a character 200 units at walk speed looks far worse
+        /// than a hard cut.
         /// </summary>
         [SerializeField] private float snapDistance = 10f;
 
         [SerializeField] private float yawTurnSpeed = 12f;
 
+        [Header("Jump simulation")]
+
+        [SerializeField] private LayerMask groundMask = ~0;
+        [SerializeField] private float groundProbeDistance = 50f;
+
         /// <summary>
-        /// When true, facing is derived from the direction of travel rather
-        /// than taken from the wire. Correct for NPCs, whose server-side
-        /// wander AI has no concept of facing and reports yaw as zero -
-        /// without this every NPC in the world stares due north while
-        /// walking sideways. Wrong for players, who send real yaw and can
-        /// face somewhere other than where they're going.
+        /// When true, facing is derived from direction of travel rather
+        /// than taken from the wire. Correct for NPCs whose server AI
+        /// reports yaw as zero; wrong for players, who send real yaw and
+        /// can face somewhere other than where they're going.
         /// </summary>
         public bool DeriveYawFromMotion { get; set; }
 
-        private Vector3 _from;
-        private Vector3 _to;
-        private Vector3 _velocity;
-        private float   _targetYawDegrees;
-        private float   _targetPitchDegrees;
-        private float   _targetRollDegrees;
+        /// <summary>
+        /// One received update. Position and rotation as reported, stamped
+        /// with the SERVER tick it describes - never the arrival time.
+        /// </summary>
+        private struct Sample
+        {
+            public uint          Tick;
+            public Vector3       Position;
+            public Vector3       Velocity;
+            public float         Yaw;
+            public float         Pitch;
+            public float         Roll;
+            public MovementState State;
+        }
 
-        private float _timer;
-        private float _interval = 0.1f;
-        private float _lastArrivalTime = -1f;
-        private bool  _initialized;
-
-        public Vector3 TargetPosition => _to;
-        public Vector3 Velocity       => _velocity;
+        private readonly List<Sample> _buffer = new(BufferCapacity);
 
         /// <summary>
-        /// What the server says this entity is doing. Nothing here consumes
-        /// it - it's exposed for an Animator driver to read, which is the
-        /// entire reason the byte is on the wire. Until something reads
-        /// this, remote characters are correctly positioned and correctly
-        /// oriented and still T-posing.
+        /// Unity time at which the newest buffered tick was received. The
+        /// bridge between server time and local time: render time is
+        /// derived as (newest tick) + (seconds elapsed locally since it
+        /// arrived) - delay.
+        /// </summary>
+        private float _newestArrivalRealtime;
+        private uint  _newestTick;
+        private bool  _hasSamples;
+
+        /// <summary>
+        /// Largest gap, in seconds, between consecutive samples recently.
+        /// Drives the adaptive delay. Decays slowly so a one-off hitch
+        /// doesn't permanently inflate the delay, but a genuine LOD tier
+        /// change is picked up within a couple of updates.
+        /// </summary>
+        private float _observedGap = 0.1f;
+
+        private float _targetYawDegrees;
+        private float _targetPitchDegrees;
+        private float _targetRollDegrees;
+        private Vector3 _renderVelocity;
+
+        private bool _initialized;
+
+        // ── Ballistic mode (jumps) ───────────────────────────────────────
+        //
+        // While a jump is in flight the VERTICAL axis is computed locally
+        // and the horizontal axis keeps following the buffer. Vertical is
+        // perfectly derivable from the takeoff instant and is the part a
+        // slow update rate describes worst; horizontal isn't derivable at
+        // all, since a jumping player can be pushed or blocked mid-air.
+
+        private bool  _jumping;
+        private float _jumpTime;
+        private float _jumpOriginY;
+        private float _jumpVelocityY;
+        private float _jumpGroundY;
+        private bool  _jumpGroundKnown;
+        private float _jumpRegroundTimer;
+
+        /// <summary>
+        /// Hard cap for a jump whose ground was never found, in seconds.
+        /// Deliberately far below MovementConstants.MaxJumpSimulationSeconds
+        /// (3s, meant for a landing packet that's merely late). A takeoff
+        /// raycast miss means we are ALREADY not tracking real ground, so
+        /// riding that out for a full 3s of blind ballistic freefall is
+        /// what produced "falls through the floor" - visually correct
+        /// physics simulating a hole in the world that isn't there. 1s is
+        /// comfortably past the ~0.77s round trip of a default jump; past
+        /// that, trust the snapshot buffer instead of the guess.
+        /// </summary>
+        [SerializeField] private float maxUngroundedJumpSeconds = 1f;
+
+        public Vector3 TargetPosition => _hasSamples ? _buffer[_buffer.Count - 1].Position : transform.position;
+        public Vector3 Velocity       => _renderVelocity;
+        public bool    IsSimulatingJump => _jumping;
+
+        /// <summary>
+        /// What the server says this entity is doing. Exposed for an
+        /// Animator driver to read - that's why the byte is on the wire.
         /// </summary>
         public MovementState State { get; private set; }
 
-        /// <summary>Raised when State changes, for animation triggers that
-        /// care about the transition (jump start, landing) rather than the
-        /// steady state.</summary>
         public event System.Action<MovementState, MovementState> StateChanged;
 
-        /// <summary>
-        /// Place the entity with no interpolation. Call on spawn, so the
-        /// first real update interpolates from where it actually is rather
-        /// than sliding in from the world origin.
-        /// </summary>
+        // ── Diagnostics ──────────────────────────────────────────────────
+
+        /// <summary>Current adaptive delay, in seconds.</summary>
+        public float CurrentDelay => Mathf.Clamp(
+            _observedGap * delayGapMultiplier, minDelaySeconds, maxDelaySeconds);
+
+        /// <summary>Samples currently buffered. Should stay comfortably
+        /// above 2; hitting 1 means the buffer is starving.</summary>
+        public int BufferedSamples => _buffer.Count;
+
+        /// <summary>Largest recent gap between samples, in seconds.</summary>
+        public float ObservedGap => _observedGap;
+
+        /// <summary>True when render time has passed the newest sample and
+        /// the fallback extrapolation is running. Should be rare.</summary>
+        public bool IsExtrapolating { get; private set; }
+
         public void Initialize(Vector3 position, float yawDegrees)
         {
             transform.position = position;
             transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
 
-            _from = _to = position;
-            _velocity = Vector3.zero;
+            _buffer.Clear();
+            _hasSamples = false;
             _targetYawDegrees = yawDegrees;
             _targetPitchDegrees = 0f;
             _targetRollDegrees = 0f;
-            _timer = 0f;
-            _lastArrivalTime = -1f;
+            _renderVelocity = Vector3.zero;
+            _observedGap = 0.1f;
             _initialized = true;
+
+            _jumping = false;
+            _jumpGroundKnown = false;
         }
 
-        /// <param name="yawDegrees">
-        /// Facing in DEGREES. The wire format is radians (see
-        /// EntityStateCodec); callers convert, because everything else in
-        /// Unity is degrees and doing it here would mean one more place to
-        /// get the unit wrong.
-        /// </param>
+        /// <summary>
+        /// Legacy path for W2CPlayerPosition, which predates the snapshot
+        /// packet and carries no tick. Falls back to synthesising one from
+        /// arrival time, which reintroduces jitter - use the tick overload
+        /// for anything coming from a world snapshot.
+        /// </summary>
         public void ApplyUpdate(Vector3 position, Vector3 velocity, float yawDegrees) =>
-            ApplyUpdate(position, velocity, yawDegrees, 0f, 0f, State);
+            ApplyUpdate(position, velocity, yawDegrees, 0f, 0f, State, 0);
 
-        /// <param name="pitchDegrees">Nose up/down. Zero for upright entities.</param>
-        /// <param name="rollDegrees">Bank. Zero for upright entities.</param>
-        /// <param name="state">What the entity is doing - see MovementState.</param>
+        public void ApplyUpdate(
+            Vector3 position, Vector3 velocity, float yawDegrees,
+            float pitchDegrees, float rollDegrees, MovementState state) =>
+            ApplyUpdate(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state, 0);
+
+        /// <param name="serverTick">
+        /// The tick this state describes. THE IMPORTANT ARGUMENT. Pass 0
+        /// only if genuinely unavailable; a synthesised tick puts network
+        /// jitter back into the timeline, which is exactly what this class
+        /// exists to remove.
+        /// </param>
         public void ApplyUpdate(
             Vector3 position,
             Vector3 velocity,
             float yawDegrees,
             float pitchDegrees,
             float rollDegrees,
-            MovementState state)
+            MovementState state,
+            uint serverTick)
         {
             if (state != State)
             {
@@ -216,102 +305,325 @@ namespace ArcheCore.Client.Gameplay
                 StateChanged?.Invoke(previous, state);
             }
 
-            _targetPitchDegrees = pitchDegrees;
-            _targetRollDegrees = rollDegrees;
-
             if (!_initialized)
             {
                 Initialize(position, yawDegrees);
-                _velocity = velocity;
-                _lastArrivalTime = Time.time;
-                return;
             }
 
-            float now = Time.time;
-
-            // Legitimate discontinuity - teleport rather than slide.
-            if ((position - transform.position).sqrMagnitude > snapDistance * snapDistance)
+            // No tick available (legacy opcode): synthesise one from the
+            // local clock so the buffer still works, accepting the jitter.
+            if (serverTick == 0)
             {
-                transform.position = position;
-                _from = _to = position;
-                _velocity = velocity;
-                _targetYawDegrees = yawDegrees;
-                _timer = 0f;
-                _lastArrivalTime = now;
-                return;
+                serverTick = _hasSamples
+                    ? _newestTick + 1
+                    : 1;
             }
 
-            if (_lastArrivalTime >= 0f)
-            {
-                float sample = now - _lastArrivalTime;
+            // Out of order or duplicate - snapshots are unreliable and can
+            // overtake each other. The buffer is ordered by tick, so a late
+            // arrival is dropped rather than corrupting the timeline.
+            if (_hasSamples && serverTick <= _newestTick)
+                return;
 
-                // Only samples inside the plausible range teach us
-                // anything. A longer gap means the entity went quiet
-                // (stationary, or dropped packets), which says nothing
-                // about its send rate - keep what we already learned.
-                if (sample <= maxInterval)
+            // Legitimate discontinuity. Not suppressed during a jump -
+            // vertical divergence during an arc is expected, but a jump
+            // never moves a character snapDistance horizontally in one
+            // update, so the check is done on the horizontal plane only.
+            if (_hasSamples)
+            {
+                var previousPos = _buffer[_buffer.Count - 1].Position;
+                var horizontalDelta = new Vector3(
+                    position.x - previousPos.x, 0f, position.z - previousPos.z);
+
+                if (horizontalDelta.sqrMagnitude > snapDistance * snapDistance)
                 {
-                    sample = Mathf.Max(sample, minInterval);
-                    _interval = Mathf.Lerp(_interval, sample, intervalSmoothing);
+                    transform.position = position;
+                    _buffer.Clear();
+                    _hasSamples = false;
+                    _jumping = false;
                 }
             }
 
-            _lastArrivalTime = now;
+            float gapSeconds = 0f;
 
-            // Start from where the entity is being RENDERED, not from the
-            // previous target. If we were extrapolating we're already past
-            // the old target, and snapping back to it before interpolating
-            // forward again is precisely the visible hitch this is all
-            // meant to remove. Continuity beats correctness here - the
-            // error is sub-centimetre and gone within one interval.
-            _from = transform.position;
-            _to = position;
-            _velocity = velocity;
-            _targetYawDegrees = yawDegrees;
-            _timer = 0f;
+            if (_hasSamples)
+            {
+                gapSeconds = (serverTick - _newestTick) / MovementConstants.ServerTickRate;
+
+                // Track the largest recent gap, decaying slowly. Rising
+                // fast matters (a tier change must widen the delay before
+                // the buffer starves); falling slowly is fine, because an
+                // over-wide delay only costs a little staleness while an
+                // under-wide one costs a visible stall.
+                // REVERTED to 0.05 (was briefly 0.15). Decaying the
+                // observed-gap ceiling three times faster meant the safety
+                // margin collapsed back toward the CURRENT gap well before
+                // the next routine gap of similar size arrived, so the
+                // delay kept shrinking just in time to be too small again -
+                // a self-inflicted extrapolation cycle on ordinary mid-tier
+                // traffic, not just real LOD-tier changes. Falling slowly
+                // is supposed to be cheap (a little staleness) precisely so
+                // it can stay wide enough to survive normal jitter; 0.05
+                // restores that.
+                _observedGap = gapSeconds > _observedGap
+                    ? gapSeconds
+                    : Mathf.Lerp(_observedGap, gapSeconds, 0.05f);
+            }
+
+            _buffer.Add(new Sample
+            {
+                Tick     = serverTick,
+                Position = position,
+                Velocity = velocity,
+                Yaw      = yawDegrees,
+                Pitch    = pitchDegrees,
+                Roll     = rollDegrees,
+                State    = state
+            });
+
+            if (_buffer.Count > BufferCapacity)
+                _buffer.RemoveAt(0);
+
+            _newestTick = serverTick;
+            _newestArrivalRealtime = Time.time;
+            _hasSamples = true;
+        }
+
+        public void BeginJump(Vector3 origin, Vector3 horizontalVelocity, float verticalVelocity)
+        {
+            if (!_initialized)
+                Initialize(origin, _targetYawDegrees);
+
+            _jumping       = true;
+            _jumpTime      = 0f;
+            _jumpOriginY   = origin.y;
+            _jumpVelocityY = verticalVelocity;
+            _jumpGroundKnown = false;
+            _jumpRegroundTimer = 0f;
+
+            // Raycast ONCE, at takeoff. A per-frame ray finds whatever is
+            // under the character mid-flight, including the lip of the
+            // ledge it just left, which ends the jump early and drops it
+            // through the floor.
+            if (Physics.Raycast(
+                    origin + Vector3.up * 0.5f, Vector3.down,
+                    out RaycastHit hit, groundProbeDistance, groundMask,
+                    QueryTriggerInteraction.Ignore))
+            {
+                _jumpGroundY = hit.point.y;
+                _jumpGroundKnown = true;
+            }
+
+            Vector3 p = transform.position;
+            transform.position = new Vector3(p.x, origin.y, p.z);
+        }
+
+        private void EndJump()
+        {
+            _jumping = false;
+            _jumpGroundKnown = false;
         }
 
         private void Update()
         {
-            if (!_initialized) return;
+            if (!_initialized || !_hasSamples) return;
 
-            _timer += Time.deltaTime;
+            // Where in SERVER TIME to render, expressed in ticks.
+            //
+            // Local elapsed time since the newest sample arrived, converted
+            // to ticks, added to that sample's tick, minus the delay. Using
+            // the newest sample's arrival as the anchor means a burst of
+            // packets or a long silence shifts the anchor but never the
+            // spacing, because the spacing comes from the ticks themselves.
+            float elapsed = Time.time - _newestArrivalRealtime;
+            float renderTick = _newestTick
+                             + elapsed * MovementConstants.ServerTickRate
+                             - CurrentDelay * MovementConstants.ServerTickRate;
 
-            if (_timer <= _interval || _interval <= 0f)
+            SampleBufferAt(renderTick, out Vector3 position, out Vector3 velocity,
+                           out float yaw, out float pitch, out float roll);
+
+            _renderVelocity = velocity;
+            _targetYawDegrees = yaw;
+            _targetPitchDegrees = pitch;
+            _targetRollDegrees = roll;
+
+            if (_jumping)
             {
-                // Constant-speed interpolation across the known gap. This
-                // is the part the old exponential lerp got wrong.
-                float t = _interval <= 0f ? 1f : _timer / _interval;
-                transform.position = Vector3.Lerp(_from, _to, t);
+                UpdateJump(position);
             }
             else
             {
-                // Overdue. Predict forward along the last known velocity,
-                // bounded - see maxExtrapolation. A stopped entity reports
-                // zero velocity, so this correctly holds it still rather
-                // than drifting it onward, which is why the client has to
-                // send that final zero-velocity packet when it stops.
-                float overtime = _timer - _interval;
-
-                if (overtime <= maxExtrapolation)
-                {
-                    transform.position = _to + _velocity * overtime;
-                }
-                else
-                {
-                    // Budget spent and still nothing new. Ease back to the
-                    // last position actually received rather than sitting
-                    // on a stale guess forever - see extrapolationUnwind.
-                    Vector3 predicted = _to + _velocity * maxExtrapolation;
-                    float t = extrapolationUnwind <= 0f
-                        ? 1f
-                        : Mathf.Clamp01((overtime - maxExtrapolation) / extrapolationUnwind);
-
-                    transform.position = Vector3.Lerp(predicted, _to, t);
-                }
+                transform.position = position;
             }
 
             ApplyRotation();
+        }
+
+        /// <summary>
+        /// Find the two buffered samples that bracket the requested tick
+        /// and interpolate between them. Both are real positions the server
+        /// reported, which is the entire point - there is nothing predicted
+        /// here to later be corrected.
+        /// </summary>
+        private void SampleBufferAt(
+            float renderTick,
+            out Vector3 position, out Vector3 velocity,
+            out float yaw, out float pitch, out float roll)
+        {
+            IsExtrapolating = false;
+
+            // Before the oldest sample: the buffer hasn't filled yet, or
+            // the delay just widened. Hold at the oldest rather than
+            // inventing anything.
+            var oldest = _buffer[0];
+
+            if (renderTick <= oldest.Tick || _buffer.Count == 1)
+            {
+                position = oldest.Position;
+                velocity = oldest.Velocity;
+                yaw = oldest.Yaw; pitch = oldest.Pitch; roll = oldest.Roll;
+                return;
+            }
+
+            var newest = _buffer[_buffer.Count - 1];
+
+            // Past the newest: buffer has run dry. This is the ONLY place
+            // extrapolation happens, and in normal operation it doesn't -
+            // the adaptive delay exists to keep render time behind the
+            // newest sample. Seeing IsExtrapolating true regularly means
+            // the delay is too short for this entity's update rate.
+            if (renderTick >= newest.Tick)
+            {
+                IsExtrapolating = true;
+
+                float overtimeSeconds = Mathf.Min(
+                    (renderTick - newest.Tick) / MovementConstants.ServerTickRate,
+                    maxExtrapolation);
+
+                position = newest.Position + newest.Velocity * overtimeSeconds;
+                velocity = newest.Velocity;
+                yaw = newest.Yaw; pitch = newest.Pitch; roll = newest.Roll;
+                return;
+            }
+
+            // The normal case. Walk back to find the bracketing pair -
+            // from the end, because render time is usually near the newest
+            // couple of samples.
+            for (int i = _buffer.Count - 2; i >= 0; i--)
+            {
+                var a = _buffer[i];
+                var b = _buffer[i + 1];
+
+                if (renderTick < a.Tick)
+                    continue;
+
+                float span = b.Tick - a.Tick;
+                float t = span <= 0f ? 1f : (renderTick - a.Tick) / span;
+
+                position = Vector3.Lerp(a.Position, b.Position, t);
+
+                // Velocity from the SEGMENT rather than the reported value.
+                // It's what the character is actually doing on screen right
+                // now, which is what a yaw-from-motion or animation driver
+                // wants. The reported velocity describes the instant the
+                // sample was taken, which is already in the past.
+                float segmentSeconds = span / MovementConstants.ServerTickRate;
+                velocity = segmentSeconds > 0f
+                    ? (b.Position - a.Position) / segmentSeconds
+                    : Vector3.zero;
+
+                yaw   = Mathf.LerpAngle(a.Yaw, b.Yaw, t);
+                pitch = Mathf.LerpAngle(a.Pitch, b.Pitch, t);
+                roll  = Mathf.LerpAngle(a.Roll, b.Roll, t);
+
+                // Everything older than the pair we just used will never be
+                // needed again - render time only moves forward.
+                if (i > 0)
+                    _buffer.RemoveRange(0, i);
+
+                return;
+            }
+
+            position = oldest.Position;
+            velocity = oldest.Velocity;
+            yaw = oldest.Yaw; pitch = oldest.Pitch; roll = oldest.Roll;
+        }
+
+        /// <summary>
+        /// Vertical from the ballistic arc, horizontal from the buffer.
+        /// </summary>
+        private void UpdateJump(Vector3 bufferedPosition)
+        {
+            _jumpTime += Time.deltaTime;
+
+            // Closed form, not incremental. Accumulating velocity per frame
+            // makes apex height depend on framerate.
+            float y = _jumpOriginY
+                    + _jumpVelocityY * _jumpTime
+                    + 0.5f * MovementConstants.Gravity * _jumpTime * _jumpTime;
+
+            transform.position = new Vector3(bufferedPosition.x, y, bufferedPosition.z);
+
+            bool descending = _jumpVelocityY + MovementConstants.Gravity * _jumpTime < 0f;
+
+            if (descending && _jumpGroundKnown && y <= _jumpGroundY)
+            {
+                transform.position = new Vector3(
+                    transform.position.x, _jumpGroundY, transform.position.z);
+                EndJump();
+                return;
+            }
+
+            // The takeoff-only raycast deliberately skips the ledge just
+            // left, but that blind spot only matters AT takeoff. Once
+            // descending, re-probe periodically from the current simulated
+            // position - this is what a takeoff-only raycast misses
+            // (terrain the takeoff ray's origin didn't see, a moving
+            // platform, geometry that streamed in after takeoff) without
+            // reintroducing the ledge problem, since by now we've moved
+            // past it.
+            if (descending && !_jumpGroundKnown)
+            {
+                _jumpRegroundTimer -= Time.deltaTime;
+                if (_jumpRegroundTimer <= 0f)
+                {
+                    _jumpRegroundTimer = 0.1f;
+
+                    if (Physics.Raycast(
+                            new Vector3(bufferedPosition.x, y, bufferedPosition.z) + Vector3.up * 0.5f,
+                            Vector3.down, out RaycastHit reground, groundProbeDistance, groundMask,
+                            QueryTriggerInteraction.Ignore))
+                    {
+                        _jumpGroundY = reground.point.y;
+                        _jumpGroundKnown = true;
+                    }
+                }
+            }
+
+            // Ground was never found. Rather than let the ballistic
+            // freefall run for the full 3s grace period meant for a merely
+            // late landing packet - which is what made an entity visibly
+            // sink through the floor - give up on the guess much sooner
+            // and fall back to whatever the snapshot buffer says. The
+            // buffer keeps receiving real server positions the whole time
+            // this simulation runs, so it is never stale, only unused.
+            float cap = _jumpGroundKnown
+                ? MovementConstants.MaxJumpSimulationSeconds
+                : maxUngroundedJumpSeconds;
+
+            if (_jumpTime >= cap)
+            {
+                EndJump();
+                return;
+            }
+
+            // The server knows about geometry this client didn't probe -
+            // roofs, ledges, anything the takeoff raycast missed. The 0.1s
+            // guard is because the snapshot describing the pre-jump frame
+            // can land just after the jump event does.
+           if ((State & MovementState.Airborne) == 0 && _jumpTime > CurrentDelay + 0.1f)
+               EndJump();
         }
 
         private void ApplyRotation()
@@ -320,13 +632,7 @@ namespace ArcheCore.Client.Gameplay
 
             if (DeriveYawFromMotion)
             {
-                // Prefer velocity; fall back to the interpolation segment
-                // for entities that report position but no velocity (mid
-                // and far LOD tiers don't carry velocity bytes).
-                Vector3 direction = _velocity.sqrMagnitude > 0.04f
-                    ? _velocity
-                    : _to - _from;
-
+                Vector3 direction = _renderVelocity;
                 direction.y = 0f;
 
                 if (direction.sqrMagnitude < 0.0004f)
@@ -335,10 +641,9 @@ namespace ArcheCore.Client.Gameplay
                 targetYaw = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
             }
 
-            // Pitch and roll go in alongside yaw rather than being slerped
-            // separately - three independent interpolations on the same
-            // transform fight each other, because each writes the whole
-            // rotation. One target quaternion, one slerp.
+            // One target quaternion, one slerp. Three independent
+            // interpolations on the same transform fight each other,
+            // because each writes the whole rotation.
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
                 Quaternion.Euler(_targetPitchDegrees, targetYaw, _targetRollDegrees),

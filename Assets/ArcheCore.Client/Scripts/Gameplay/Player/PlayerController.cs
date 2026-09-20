@@ -210,7 +210,30 @@ namespace ArchCore.Client
             // packet. Skipping it would leave _lastSentState stale, every
             // frame would look like a state change, and the send gate would
             // fire continuously - a different bug wearing the same costume.
-            _sendTimer = 0f;
+            // SUBTRACT, don't zero.
+            //
+            // Zeroing throws away the overshoot. Time.deltaTime is never an
+            // exact divisor of SendRate, so the timer crosses 0.05 at, say,
+            // 0.0518 and the extra 1.8ms is discarded. Every send loses a
+            // different amount depending on where the frame boundary landed,
+            // so the actual cadence is SendRate PLUS a random slice of one
+            // frame - at 289fps that's up to 3.5ms of jitter per packet, and
+            // it gets worse as framerate drops or varies.
+            //
+            // That jitter is what the server's staleness gate was sampling
+            // when it decided whether an entity had "changed recently", and
+            // it is half of why the replication cadence came out as
+            // 150/389/601/469ms instead of a flat 150. The server-side fix
+            // removes the sensitivity; this removes the jitter at the source.
+            //
+            // Subtracting carries the remainder into the next interval, so
+            // sends land on a stable 20Hz grid regardless of frame rate.
+            // Guarded against a long hitch (a GC pause, a level load)
+            // leaving the timer so far ahead that it fires several sends
+            // back to back trying to catch up.
+            _sendTimer -= SendRate;
+            if (_sendTimer > SendRate) _sendTimer = 0f;
+
             _lastSentYaw = state.Yaw * Mathf.Rad2Deg;
             _lastSentState = moveState;
 
@@ -237,22 +260,58 @@ namespace ArchCore.Client
 
         // --- Remote application ---
 
-        /// <summary>Legacy W2CPlayerPosition path - position only.</summary>
+        /// <summary>
+        /// Legacy W2CPlayerPosition path - position only, no server tick.
+        ///
+        /// Passes tick 0, which tells the interpolator to synthesise one
+        /// from arrival order. That reintroduces network jitter into the
+        /// timeline, which is exactly what the snapshot buffer exists to
+        /// remove - acceptable only because nothing on the live movement
+        /// path uses this opcode any more. Everything rides
+        /// W2CWorldSnapshot, which carries a real tick.
+        /// </summary>
         public void SetTargetPosition(Vector3 position)
         {
             var current = _interpolator != null ? _interpolator.State : MovementState.None;
-            ApplyNetworkState(position, Vector3.zero, transform.eulerAngles.y, 0f, 0f, current);
+            ApplyNetworkState(position, Vector3.zero, transform.eulerAngles.y, 0f, 0f, current, 0);
         }
 
+        /// <param name="serverTick">
+        /// The tick this state describes, straight from the snapshot
+        /// packet. MUST be forwarded to the interpolator - it is what
+        /// places the sample on a jitter-free timeline. Dropping it here
+        /// silently falls back to arrival-order ticks and the character
+        /// stutters exactly as it did before the buffer existed, with no
+        /// compiler warning, because the shorter overload still exists.
+        /// </param>
         public void ApplyNetworkState(
             Vector3 position, Vector3 velocity,
             float yawDegrees, float pitchDegrees, float rollDegrees,
-            MovementState state)
+            MovementState state, uint serverTick)
         {
             if (isLocalPlayer || _interpolator == null)
                 return;
 
-            _interpolator.ApplyUpdate(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
+            _interpolator.ApplyUpdate(
+                position, velocity, yawDegrees, pitchDegrees, rollDegrees, state, serverTick);
+        }
+
+        /// <summary>
+        /// Start a simulated jump arc for a REMOTE player.
+        ///
+        /// Ignored for the local player, and the guard matters more here
+        /// than it does in ApplyNetworkState. The local player jumped under
+        /// their own control a moment ago and is already part way through
+        /// the arc. Restarting it from the server's takeoff instant would
+        /// snap them backwards in time, by however long the round trip
+        /// took.
+        /// </summary>
+        public void BeginJump(Vector3 origin, Vector3 horizontalVelocity, float verticalVelocity)
+        {
+            if (isLocalPlayer || _interpolator == null)
+                return;
+
+            _interpolator.BeginJump(origin, horizontalVelocity, verticalVelocity);
         }
 
         /// <summary>

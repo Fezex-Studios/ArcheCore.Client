@@ -81,10 +81,28 @@ namespace ArcheCore.Client.Gameplay
         public void ApplyNetworkState(
             int networkId, Vector3 position, Vector3 velocity,
             float yawDegrees, float pitchDegrees, float rollDegrees,
-            ArcheCore.Network.Shared.MovementState state)
+            ArcheCore.Network.Shared.MovementState state, uint serverTick)
         {
             if (players.TryGetValue(networkId, out PlayerController pc))
-                pc.ApplyNetworkState(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
+                pc.ApplyNetworkState(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state, serverTick);
+        }
+
+        /// <summary>
+        /// Start a locally simulated jump arc for a remote player.
+        ///
+        /// Returns false when this network id isn't a player we know
+        /// about, so the caller can try the NPC registry instead - the
+        /// jump packet carries no flag saying which kind of entity it
+        /// refers to.
+        /// </summary>
+        public bool BeginJump(
+            int networkId, Vector3 origin, Vector3 horizontalVelocity, float verticalVelocity)
+        {
+            if (!players.TryGetValue(networkId, out PlayerController pc))
+                return false;
+
+            pc.BeginJump(origin, horizontalVelocity, verticalVelocity);
+            return true;
         }
 
         public void Despawn(int networkId)

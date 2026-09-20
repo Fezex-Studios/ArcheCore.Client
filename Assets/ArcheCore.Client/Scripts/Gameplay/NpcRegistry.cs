@@ -40,10 +40,26 @@ namespace ArcheCore.Client.Gameplay
         public void ApplyNetworkState(
             int networkId, Vector3 position, Vector3 velocity,
             float yawDegrees, float pitchDegrees, float rollDegrees,
-            ArcheCore.Network.Shared.MovementState state)
+            ArcheCore.Network.Shared.MovementState state, uint serverTick)
         {
             if (_npcs.TryGetValue(networkId, out var npc))
-                npc.ApplyNetworkState(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state);
+                npc.ApplyNetworkState(position, velocity, yawDegrees, pitchDegrees, rollDegrees, state, serverTick);
+        }
+
+        /// <summary>
+        /// Mirrors PlayerRegistry.BeginJump. Nothing server-side sets the
+        /// Jumping bit on an NPC today, so this never fires yet - but the
+        /// interest set holds players and NPCs together and the packet
+        /// doesn't say which it is, so the lookup has to cover both.
+        /// </summary>
+        public bool BeginJump(
+            int networkId, Vector3 origin, Vector3 horizontalVelocity, float verticalVelocity)
+        {
+            if (!_npcs.TryGetValue(networkId, out var npc))
+                return false;
+
+            npc.BeginJump(origin, horizontalVelocity, verticalVelocity);
+            return true;
         }
 
         public void Despawn(int networkId)

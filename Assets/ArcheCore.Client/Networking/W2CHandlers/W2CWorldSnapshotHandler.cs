@@ -76,7 +76,7 @@ namespace ArcheCore.Client.Networking.W2C
                 LastTick[entry.NetworkId] = tick;
                 npcs.ApplyNetworkState(
                     entry.NetworkId, entry.Position, entry.Velocity,
-                    yawDegrees, pitchDegrees, rollDegrees, entry.State);
+                    yawDegrees, pitchDegrees, rollDegrees, entry.State, tick);
             }
             else
             {
@@ -90,7 +90,7 @@ namespace ArcheCore.Client.Networking.W2C
                 LastTick[entry.NetworkId] = tick;
                 players.ApplyNetworkState(
                     entry.NetworkId, entry.Position, entry.Velocity,
-                    yawDegrees, pitchDegrees, rollDegrees, entry.State);
+                    yawDegrees, pitchDegrees, rollDegrees, entry.State, tick);
             }
         }
     }
