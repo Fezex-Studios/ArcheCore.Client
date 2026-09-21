@@ -1,6 +1,5 @@
 using ArchCore.Client;
 using ArcheCore.Client.Gameplay;
-using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.UI;
 using ArcheCore.Network.Client;
 using LiteNetLib;
@@ -50,11 +49,11 @@ namespace ArcheCore.Client.Networking.W2C
             if (packet.IsLocalPlayer && pc != null)
             {
                 ClientNetwork.Instance.LocalPlayer = pc;
-
-                // Scene is loaded and the local player object exists - this is
-                // the actual "ready" moment. HUD elements react to
-                // PlayerStatEvents.OnCharacterDataChanged from the reply.
-                C2WPlayerSpawnedPacketSender.Send(ClientNetwork.Instance.ServerPeer);
+                // Local player object exists now. No ack needed - gold,
+                // inventory and character data all arrive via
+                // W2CEnterWorld the moment the server spawns the session,
+                // and LocalCharacterState caches them regardless of
+                // whether this point in scene load has been reached yet.
             }
         }
     }

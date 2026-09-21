@@ -1,20 +1,23 @@
 ﻿using TMPro;
 using UnityEngine;
 using ArcheCore.Client.UI.Events;
+using ArcheCore.Client.UI.State;
 
 namespace ArcheCore.Client.UI
 {
     /// <summary>
-    /// HUD: shows the local character's gold. Byte-for-byte the same
-    /// shape as PlayerSpawnData - one label, subscribe on enable,
-    /// unsubscribe on disable, do nothing if no label was wired up in
-    /// the Inspector.
+    /// HUD: shows the local character's gold. One label, subscribe on
+    /// enable, unsubscribe on disable, do nothing if no label was wired
+    /// up in the Inspector.
     ///
-    /// Separate component from PlayerSpawnData rather than one more field
-    /// on it, because gold and name/level come from genuinely different
-    /// packets on genuinely different cadences - see the comment on
-    /// PlayerStatEvents.OnGoldChanged. Two small components that each do
-    /// one thing beats one component juggling two unrelated update rates.
+    /// Separate component from AdminPanelData rather than one more field
+    /// on it, because this one belongs on the ALWAYS-VISIBLE HUD - the
+    /// player's actual gold readout - while the admin panel's copy is a
+    /// dev convenience that happens to show the same number.
+    ///
+    /// Pulls from LocalCharacterState on enable for the same reason
+    /// everything else does: the initial balance arrives on W2CEnterWorld
+    /// while main_world is still loading, before this object exists.
     /// </summary>
     public class PlayerGoldDisplay : MonoBehaviour
     {
@@ -22,8 +25,8 @@ namespace ArcheCore.Client.UI
 
         /// <summary>
         /// Optional format string, so a designer can change "120" to
-        /// "120g" or "💰 120" from the Inspector without a code change.
-        /// {0} is replaced with the gold value.
+        /// "120g" or "Gold: 120" from the Inspector without a code
+        /// change. {0} is replaced with the gold value.
         /// </summary>
         [SerializeField] private string format = "{0}";
 
@@ -36,6 +39,9 @@ namespace ArcheCore.Client.UI
         private void OnEnable()
         {
             PlayerStatEvents.OnGoldChanged += SetGold;
+
+            if (LocalCharacterState.HasEnteredWorld)
+                SetGold(LocalCharacterState.Gold);
         }
 
         private void OnDisable()
