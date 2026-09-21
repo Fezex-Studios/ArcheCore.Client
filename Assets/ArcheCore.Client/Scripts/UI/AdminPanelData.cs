@@ -12,14 +12,15 @@ namespace ArcheCore.Client.UI
     /// <summary>
     /// Dev panel: level/gold readout plus the debug grant buttons.
     ///
-    /// Lives on a GameObject that starts INACTIVE in main_world (it's a
-    /// WorldUIManager toggle), so it is guaranteed not to be subscribed
-    /// when W2CEnterWorld lands. That's why OnEnable pulls from
-    /// LocalCharacterState after subscribing - without it the labels stay
-    /// blank until something happens to change gold or level, which is
-    /// exactly the "gold only shows after I click Add Gold" symptom.
+    /// Standard UIPanel split:
+    ///   AdminPanel (ALWAYS ACTIVE - this component)
+    ///   └── Window (everything you see - assign to `window`)
+    ///
+    /// Because the root stays active, the label subscriptions below live
+    /// for the whole session, so the readout stays current while the panel
+    /// is closed. OnOpened pulls from LocalCharacterState as a backstop.
     /// </summary>
-    public class AdminPanelData : MonoBehaviour
+    public class AdminPanelData : UIPanel
     {
         [SerializeField] private TMP_Text levelLabel;
         [SerializeField] private int testItemId = 1;
@@ -35,19 +36,7 @@ namespace ArcheCore.Client.UI
             PlayerStatEvents.OnLevelChanged += SetLevel;
             PlayerStatEvents.OnGoldChanged += SetGold;
 
-            // Catch up on whatever arrived while this panel was closed or
-            // didn't exist yet.
-            if (LocalCharacterState.HasEnteredWorld)
-            {
-                SetLevel(LocalCharacterState.Level);
-                SetGold(LocalCharacterState.Gold);
-            }
-            else
-            {
-                // Pre-EnterWorld only - a level-up round trip is no longer
-                // how the initial level arrives.
-                RequestLevel();
-            }
+            PullState();
         }
 
         private void OnDisable()
@@ -56,6 +45,26 @@ namespace ArcheCore.Client.UI
             PlayerStatEvents.OnLevelChanged -= SetLevel;
             PlayerStatEvents.OnGoldChanged -= SetGold;
         }
+
+        protected override void OnOpened()
+        {
+            PullState();
+
+            // Pre-EnterWorld only - the level normally arrives with it.
+            if (!LocalCharacterState.HasEnteredWorld)
+                RequestLevel();
+        }
+
+        private void PullState()
+        {
+            if (!LocalCharacterState.HasEnteredWorld)
+                return;
+
+            SetLevel(LocalCharacterState.Level);
+            SetGold(LocalCharacterState.Gold);
+        }
+
+        // ── Buttons (wire these in each Button's On Click) ───────────
 
         public void OnRequestItemButtonClicked()
         {
@@ -80,10 +89,8 @@ namespace ArcheCore.Client.UI
             C2WDebugAddGoldPacketSender.Send(ClientNetwork.Instance.ServerPeer, testAddGoldAmount);
         }
 
-        // Reuses testItemId - the same field the item-DATA-lookup button
-        // already uses - so testing "does this item exist" and "give me
-        // this item" point at the same id without two fields to keep in
-        // sync by hand.
+        // Reuses testItemId, so "does this item exist" and "give me this
+        // item" always point at the same id.
         public void OnAddItemButtonClicked()
         {
             if (ClientNetwork.Instance?.ServerPeer == null) return;
@@ -92,8 +99,6 @@ namespace ArcheCore.Client.UI
 
         private void RequestLevel()
         {
-            // Null-conditional on Instance too: this panel can be enabled
-            // from the editor before ClientNetwork's Awake has run.
             if (ClientNetwork.Instance?.ServerPeer == null)
             {
                 Debug.LogWarning("[AdminPanel] No worldserver connected.");
