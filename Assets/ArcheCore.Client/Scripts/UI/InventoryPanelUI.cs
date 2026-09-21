@@ -25,11 +25,16 @@ namespace ArcheCore.Client.UI
     /// back. On a bad connection a move visibly waits a beat - that's
     /// correct, not a bug to hide with an optimistic local swap.
     ///
-    /// Subscribes to inventory events AND pulls from LocalCharacterState
-    /// on enable: events cover changes while alive, the pull covers the
-    /// initial inventory, which arrives before this object exists.
+    /// Standard UIPanel split:
+    ///   InventoryPanel (ALWAYS ACTIVE - this component, plus UILayer = Windows)
+    ///   └── InventoryWindow (the visuals - assign to `window`)
+    ///
+    /// The root is active all session, so it's subscribed to inventory
+    /// events the whole time and hidden slots stay current. It also pulls
+    /// from LocalCharacterState on enable and on every open, because the
+    /// initial inventory arrives before this object exists.
     /// </summary>
-    public class InventoryPanelUI : MonoBehaviour, IInventorySlotHost
+    public class InventoryPanelUI : UIPanel, IInventorySlotHost
     {
         [SerializeField] private InventorySlotUI slotPrefab;
         [SerializeField] private Transform slotParent;
@@ -39,7 +44,7 @@ namespace ArcheCore.Client.UI
         [SerializeField] private RectTransform dragGhost;
         [SerializeField] private TMP_Text dragGhostLabel;
 
-        [Tooltip("Releasing a drag OUTSIDE this rect asks to destroy the item. Assign InventoryWindow. Leave empty to disable drag-to-destroy.")]
+        [Tooltip("Releasing a drag OUTSIDE this rect asks to destroy the item. Leave empty to use `window` - override only if the visible background is a different child.")]
         [SerializeField] private RectTransform dropZone;
 
         private readonly List<InventorySlotUI> _slots = new();
@@ -50,8 +55,15 @@ namespace ArcheCore.Client.UI
 
         private static ClientNetwork Net => ClientNetwork.Instance;
 
-        private void Awake()
+        protected override void Awake()
         {
+            base.Awake();
+
+            // Empty Drop Zone used to silently disable drag-to-destroy.
+            // The window itself is the right answer almost every time.
+            if (dropZone == null && window != null)
+                dropZone = window.transform as RectTransform;
+
             SetupDragGhost();
 
             if (slotPrefab == null || slotParent == null)
@@ -78,8 +90,7 @@ namespace ArcheCore.Client.UI
             PlayerInventoryEvents.OnInventorySnapshot += HandleSnapshot;
             PlayerInventoryEvents.OnSlotChanged += HandleSlotChanged;
 
-            if (LocalCharacterState.Inventory != null)
-                HandleSnapshot(LocalCharacterState.Inventory);
+            PullState();
         }
 
         private void OnDisable()
@@ -87,10 +98,26 @@ namespace ArcheCore.Client.UI
             PlayerInventoryEvents.OnInventorySnapshot -= HandleSnapshot;
             PlayerInventoryEvents.OnSlotChanged -= HandleSlotChanged;
 
-            // Nothing may survive the panel closing: no armed selection, no
-            // drag ghost stuck on screen.
             ClearSelection();
             CancelDrag();
+        }
+
+        protected override void OnOpened() => PullState();
+
+        /// <summary>
+        /// Nothing may survive the window closing: no armed selection, no
+        /// drag ghost stuck on screen.
+        /// </summary>
+        protected override void OnClosed()
+        {
+            ClearSelection();
+            CancelDrag();
+        }
+
+        private void PullState()
+        {
+            if (LocalCharacterState.Inventory != null)
+                HandleSnapshot(LocalCharacterState.Inventory);
         }
 
         // ── Server -> grid ───────────────────────────────────────────
@@ -208,8 +235,14 @@ namespace ArcheCore.Client.UI
             bool handled = _dropHandled;
             CancelDrag();
 
-            if (source == null || handled || dropZone == null)
+            if (source == null || handled)
                 return;
+
+            if (dropZone == null)
+            {
+                Debug.LogWarning("[InventoryPanelUI] No Drop Zone and no window - drag-to-destroy is off.", this);
+                return;
+            }
 
             // Released inside the window but not on a slot: do nothing.
             // Released outside it: that's the "drag it off to destroy" gesture.
@@ -234,7 +267,7 @@ namespace ArcheCore.Client.UI
             int itemTemplateId = slot.ItemTemplateId;
             string shown = slot.DisplayText;
 
-            ConfirmDialog.Ask(
+            bool dialogShown = ConfirmDialog.Ask(
                 "Destroy item?",
                 $"Destroy {shown}? This can't be undone.",
                 () =>
@@ -252,8 +285,9 @@ namespace ArcheCore.Client.UI
                 },
                 confirmText: "Destroy");
 
-            // If Ask returns false there's no dialog in the scene. That is a
-            // cancel, never a silent destroy.
+            // No dialog in the scene is a cancel, never a silent destroy.
+            if (!dialogShown)
+                Debug.LogWarning("[InventoryPanelUI] ConfirmDialog missing from the scene - destroy cancelled.", this);
         }
 
         // ── Helpers ──────────────────────────────────────────────────

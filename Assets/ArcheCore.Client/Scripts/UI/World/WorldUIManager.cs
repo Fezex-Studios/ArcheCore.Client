@@ -1,93 +1,211 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using ArcheCore.Client.UI.Interfaces;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ArcheCore.Client.UI
 {
     [Serializable]
-    public class ToggleBinding
+    public class PanelBinding
     {
-        public Key toggleKey;
-
-        // Unity can't serialize an interface reference directly, so we take
-        // the MonoBehaviour and cast to IUIPanel at runtime. Assign any
-        // component here that implements IUIPanel (inspector won't stop you
-        // assigning a non-IUIPanel component — Awake() validates it).
-        [SerializeField] private MonoBehaviour panelBehaviour;
-
-        private IUIPanel _panel;
-        public IUIPanel Panel => _panel ??= panelBehaviour as IUIPanel;
-        public string PanelName => panelBehaviour != null ? panelBehaviour.name : "(unassigned)";
+        public Key key;
+        public UIPanel panel;
     }
 
+    /// <summary>
+    /// The one place world-HUD panels open and close. Replaces
+    /// HUDInputManager.
+    ///
+    ///   - Hotkeys: the `bindings` list, Key -> UIPanel. Ignored while the
+    ///     player is typing in any input field, so a chat message with an
+    ///     "i" in it doesn't toggle the inventory.
+    ///   - Escape closes the most recently opened panel that allows it.
+    ///     With ConfirmDialog up, Escape cancels it before anything else.
+    ///   - Anything can open a panel from code:
+    ///         WorldUIManager.Instance.Open(somePanel);   // or somePanel.Open()
+    ///     so a loot window can open the inventory, death can CloseAll().
+    ///   - IsAnyBlockingInputOpen tells gameplay code a window wants the
+    ///     keyboard/mouse.
+    ///
+    /// Put exactly one in the scene, on an always-active object.
+    /// </summary>
     public class WorldUIManager : MonoBehaviour
     {
-        [SerializeField] private ToggleBinding[] toggles;
+        public static WorldUIManager Instance { get; private set; }
 
+        [SerializeField] private PanelBinding[] bindings = Array.Empty<PanelBinding>();
+
+        // Most recently opened last. Escape pops from the end.
         private readonly List<IUIPanel> _openStack = new();
 
-        // Gameplay/camera scripts can check this before consuming
-        // movement/look input, instead of each panel needing its own
-        // "am I blocking input" flag.
-        public bool IsAnyBlockingInputOpen => _openStack.Count > 0;
+        /// <summary>True while any open panel blocks gameplay input.</summary>
+        public bool IsAnyBlockingInputOpen
+        {
+            get
+            {
+                Prune();
+                foreach (var p in _openStack)
+                {
+                    // A plain IUIPanel (not a UIPanel) is treated as blocking.
+                    if (p is not UIPanel up || up.BlocksGameplayInput)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True while an input field has keyboard focus - chat, a search
+        /// box, a rename field. Gameplay hotkeys should check this.
+        /// </summary>
+        public static bool IsTypingInField
+        {
+            get
+            {
+                var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+                if (selected == null)
+                    return false;
+
+                var tmp = selected.GetComponent<TMP_InputField>();
+                if (tmp != null && tmp.isFocused)
+                    return true;
+
+                var legacy = selected.GetComponent<UnityEngine.UI.InputField>();
+                return legacy != null && legacy.isFocused;
+            }
+        }
 
         private void Awake()
         {
-            foreach (var t in toggles)
+            if (Instance != null && Instance != this)
             {
-                if (t.Panel == null)
-                    Debug.LogError(
-                        $"[WorldUIManager] Toggle bound to {t.toggleKey} is not assigned to " +
-                        $"a component implementing IUIPanel ({t.PanelName}).");
+                Debug.LogWarning("[WorldUIManager] More than one in the scene - keeping the first.", this);
+                Destroy(this);
+                return;
             }
+
+            Instance = this;
+
+            for (int i = 0; i < bindings.Length; i++)
+            {
+                if (bindings[i] == null || bindings[i].panel == null)
+                    Debug.LogError($"[WorldUIManager] Binding #{i} ({bindings[i]?.key}) has no panel assigned.", this);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
         }
 
         private void Update()
         {
-            if (Keyboard.current == null) return;
+            var keyboard = Keyboard.current;
+            if (keyboard == null)
+                return;
 
-            foreach (var t in toggles)
+            // Typing owns the keyboard, Escape included - TMP_InputField
+            // uses Escape to drop focus, and closing a window on the same
+            // press would eat that.
+            if (IsTypingInField)
+                return;
+
+            if (keyboard.escapeKey.wasPressedThisFrame)
             {
-                if (t.Panel == null) continue;
-
-                if (Keyboard.current[t.toggleKey].wasPressedThisFrame)
-                    Toggle(t.Panel);
+                CloseTopmost();
+                return;
             }
 
-            if (Keyboard.current.escapeKey.wasPressedThisFrame)
-                CloseTopmost();
+            foreach (var b in bindings)
+            {
+                if (b?.panel == null || b.key == Key.None)
+                    continue;
+
+                if (keyboard[b.key].wasPressedThisFrame)
+                    Toggle(b.panel);
+            }
         }
 
-        public void Toggle(IUIPanel panel)
-        {
-            if (panel.IsVisible)
-                Close(panel);
-            else
-                Open(panel);
-        }
+        // ── API ──────────────────────────────────────────────────────
 
         public void Open(IUIPanel panel)
         {
-            if (panel.IsVisible) return;
+            if (panel == null)
+                return;
 
-            panel.Show();
-            _openStack.Add(panel);
+            Prune();
+
+            // Re-opening an open panel brings it to the top of the Escape order.
+            _openStack.Remove(panel);
+
+            if (!panel.IsVisible)
+                panel.Show();
+
+            if (panel.IsVisible)
+                _openStack.Add(panel);
         }
 
         public void Close(IUIPanel panel)
         {
-            if (!panel.IsVisible) return;
+            if (panel == null)
+                return;
 
-            panel.Hide();
             _openStack.Remove(panel);
+
+            if (panel.IsVisible)
+                panel.Hide();
+        }
+
+        public void Toggle(IUIPanel panel)
+        {
+            if (panel == null)
+                return;
+
+            if (panel.IsVisible) Close(panel);
+            else Open(panel);
+        }
+
+        /// <summary>Closes everything - death, teleport, logout.</summary>
+        public void CloseAll()
+        {
+            Prune();
+
+            for (int i = _openStack.Count - 1; i >= 0; i--)
+                _openStack[i].Hide();
+
+            _openStack.Clear();
         }
 
         private void CloseTopmost()
         {
-            if (_openStack.Count == 0) return;
-            Close(_openStack[^1]);
+            Prune();
+
+            for (int i = _openStack.Count - 1; i >= 0; i--)
+            {
+                var p = _openStack[i];
+                if (p is UIPanel up && !up.CloseOnEscape)
+                    continue;
+
+                Close(p);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Drops stack entries for panels something hid behind the
+        /// manager's back (a direct Hide() call, a destroyed object), so
+        /// Escape never "closes" a window that's already gone.
+        /// </summary>
+        private void Prune()
+        {
+            _openStack.RemoveAll(p =>
+                p == null ||
+                (p is UnityEngine.Object o && o == null) ||
+                !p.IsVisible);
         }
     }
 }

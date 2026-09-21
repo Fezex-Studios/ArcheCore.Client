@@ -812,13 +812,13 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 174007027}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 979888183}
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -1218,13 +1218,14 @@ GameObject:
   - component: {fileID: 252334582}
   - component: {fileID: 252334584}
   - component: {fileID: 252334583}
+  - component: {fileID: 252334585}
   m_Layer: 5
   m_Name: DragGhost
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &252334582
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1283,6 +1284,20 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 252334581}
   m_CullTransparentMesh: 1
+--- !u!114 &252334585
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 252334581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ff6ac96fc79e4147a60b5c9554aee2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.UILayer
+  layer: 300
+  orderOffset: 0
 --- !u!1 &269323213
 GameObject:
   m_ObjectHideFlags: 0
@@ -2326,13 +2341,14 @@ GameObject:
   - component: {fileID: 526945694}
   - component: {fileID: 526945693}
   - component: {fileID: 526945695}
+  - component: {fileID: 526945696}
   m_Layer: 5
   m_Name: AdminPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &526945691
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2345,13 +2361,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 174007028}
-  - {fileID: 810835265}
-  - {fileID: 582354491}
-  - {fileID: 2138042154}
-  - {fileID: 1594053286}
-  - {fileID: 930924108}
-  - {fileID: 555256668}
+  - {fileID: 925947265}
   m_Father: {fileID: 620652936}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -2372,7 +2382,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.3207547, g: 0.30713776, b: 0.30713776, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -2409,11 +2419,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d6c7aead606418696cc8a51759345fe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.AdminPanelData
+  window: {fileID: 925947264}
+  startOpen: 0
+  closeOnEscape: 1
+  blocksGameplayInput: 1
   levelLabel: {fileID: 1594053284}
   testItemId: 1
   goldLabel: {fileID: 555256666}
   testAddGoldAmount: 100
   testAddItemQuantity: 1
+--- !u!114 &526945696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 526945690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ff6ac96fc79e4147a60b5c9554aee2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.UILayer
+  layer: 100
+  orderOffset: 0
 --- !u!1 &528356674
 GameObject:
   m_ObjectHideFlags: 0
@@ -3118,12 +3146,12 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 555256665}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -3214,7 +3242,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 208775971}
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -3964,13 +3992,13 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 810835264}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1711407669}
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -4286,6 +4314,48 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 912238355}
   m_CullTransparentMesh: 1
+--- !u!1 &925947264
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 925947265}
+  m_Layer: 5
+  m_Name: Window
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &925947265
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 925947264}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 174007028}
+  - {fileID: 810835265}
+  - {fileID: 582354491}
+  - {fileID: 2138042154}
+  - {fileID: 1594053286}
+  - {fileID: 930924108}
+  - {fileID: 555256668}
+  m_Father: {fileID: 526945691}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &930924107
 GameObject:
   m_ObjectHideFlags: 0
@@ -4312,13 +4382,13 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 930924107}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1026904920}
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -6523,6 +6593,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1387939188}
   - component: {fileID: 1387939189}
+  - component: {fileID: 1387939190}
   m_Layer: 5
   m_Name: InventoryPanel
   m_TagString: Untagged
@@ -6562,11 +6633,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f23e9889a9f24431871f0b5c428c623e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.InventoryPanelUI
+  window: {fileID: 1309182315}
+  startOpen: 0
+  closeOnEscape: 1
+  blocksGameplayInput: 1
   slotPrefab: {fileID: 544510156192667221, guid: e18f26b7819aa614abce868e09a7ce31, type: 3}
   slotParent: {fileID: 56742172}
   dragGhost: {fileID: 252334582}
   dragGhostLabel: {fileID: 1904072043}
   dropZone: {fileID: 1309182316}
+--- !u!114 &1387939190
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1387939187}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ff6ac96fc79e4147a60b5c9554aee2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.UILayer
+  layer: 100
+  orderOffset: 0
 --- !u!1 &1499985629
 GameObject:
   m_ObjectHideFlags: 0
@@ -7025,12 +7114,12 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1594053283}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -7376,14 +7465,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 1637467155}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 96936dcd35c3ea1428716d828b5bd54b, type: 3}
+  m_Script: {fileID: 11500000, guid: d21105096b6b47e3afd3b558979f6103, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.HUDInputManager
-  toggles:
-  - toggleKey: 17
-    panel: {fileID: 526945690}
-  - toggleKey: 23
-    panel: {fileID: 1309182315}
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.WorldUIManager
+  bindings:
+  - key: 94
+    panel: {fileID: 526945695}
+  - key: 23
+    panel: {fileID: 1387939189}
 --- !u!1 &1655657865
 GameObject:
   m_ObjectHideFlags: 0
@@ -9215,6 +9304,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2026312692}
   - component: {fileID: 2026312693}
+  - component: {fileID: 2026312694}
   m_Layer: 5
   m_Name: ConfirmDialog
   m_TagString: Untagged
@@ -9255,12 +9345,28 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.ConfirmDialog
   window: {fileID: 588609498}
+  startOpen: 0
+  closeOnEscape: 1
+  blocksGameplayInput: 1
   titleLabel: {fileID: 2084895140}
   messageLabel: {fileID: 1267817797}
   confirmButton: {fileID: 269323215}
   confirmButtonLabel: {fileID: 1305869949}
   cancelButton: {fileID: 1386000350}
-  uiManager: {fileID: 0}
+--- !u!114 &2026312694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2026312691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ff6ac96fc79e4147a60b5c9554aee2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArcheCore.Client.UI.UILayer
+  layer: 200
+  orderOffset: 0
 --- !u!1 &2027533279
 GameObject:
   m_ObjectHideFlags: 0
@@ -9766,12 +9872,12 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2138042153}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 526945691}
+  m_Father: {fileID: 925947265}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
