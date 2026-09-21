@@ -3,6 +3,7 @@ using ArchCore.Client;
 using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
 using ArcheCore.Client.UI.Events;
+using ArcheCore.Client.UI.State;
 using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Client;
 using LiteNetLib;
@@ -53,6 +54,8 @@ namespace ArcheCore.Client.Networking
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            LocalCharacterState.Init();
 
             ReadCommandLineToken();
         }
@@ -117,6 +120,7 @@ namespace ArcheCore.Client.Networking
             // queued for a previous world session may run in this one.
             W2CWorldSnapshotHandler.Reset();
             WorldLoader.ClearPending();
+            LocalCharacterState.Reset();
 
             client.Connect(ip, WorldServerPort, ConnectionKey);
         }
@@ -161,7 +165,7 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.ChatMessage,         new W2CChatMessageHandler());
 
             dispatcher.Register(Opcodes.ItemDataResponse, new W2CItemDataResponseHandler());
-            dispatcher.Register(Opcodes.PlayerSpawned,    new W2CCharacterDataHandler());
+            dispatcher.Register(Opcodes.W2CEnterWorld,    new W2CEnterWorldHandler());
 
             // Batched movement snapshots (opcode 30) - the only way the server
             // sends other players' movement.
@@ -171,6 +175,9 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CPositionCorrection, new W2CPositionCorrectionHandler());
             dispatcher.Register(Opcodes.W2CJumpEvent,          new W2CJumpEventHandler());
             dispatcher.Register(Opcodes.W2CGoldUpdate,new W2CGoldUpdatehandler());
+            dispatcher.Register(Opcodes.W2CInventorySnapshot, new W2CInventorySnapshotHandler());
+            dispatcher.Register(Opcodes.W2CInventorySlotChanged, new W2CInventorySlotChangedHandler());
+            dispatcher.Register(Opcodes.W2CItemCooldown, new W2CItemCooldownHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
@@ -245,6 +252,7 @@ namespace ArcheCore.Client.Networking
             SessionManager.ClearToken();
 
             W2CWorldSnapshotHandler.Reset();
+            LocalCharacterState.Reset();
 
             LastDisconnectMessage = message;
 
