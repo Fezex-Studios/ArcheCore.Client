@@ -1,4 +1,4 @@
-﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Client.Gameplay;
 using ArcheCore.Movement;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -142,6 +142,15 @@ namespace ArcheCore.Client.Movement
         {
             var input = new MoveInput();
             if (Actions == null) return input;
+
+            // Dead: no movement, but keep the yaw so the camera doesn't
+            // snap when you respawn. The server ignores movement from a
+            // dead player anyway (roadmap J).
+            if (ArcheCore.Client.Gameplay.Combat.DeathState.IsDead)
+            {
+                input.Yaw = _yawDegrees * Mathf.Deg2Rad;
+                return input;
+            }
 
             bool steering = mmoCamera != null && mmoCamera.IsSteering;
 

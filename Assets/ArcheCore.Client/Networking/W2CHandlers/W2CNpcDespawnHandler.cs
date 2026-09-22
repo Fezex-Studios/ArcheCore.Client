@@ -25,7 +25,15 @@ namespace ArcheCore.Client.Networking.W2C
             // matching spawn that arrived earlier.
             WorldLoader.RunWhenReady(() =>
             {
+                // Whatever it was, it's no longer a valid target - and if it
+                // was the corpse in the loot window, that window closes.
+                ArcheCore.Client.Gameplay.Combat.CombatClient.ClearTargetIf(networkId);
+                ArcheCore.Client.UI.LootWindowUI.CloseIf(networkId);
+
                 if (HarvestNodeRegistry.Despawn(networkId))
+                    return;
+
+                if (ArcheCore.Client.Gameplay.Combat.CorpseRegistry.Despawn(networkId))
                     return;
 
                 NpcRegistry.Instance?.Despawn(networkId);

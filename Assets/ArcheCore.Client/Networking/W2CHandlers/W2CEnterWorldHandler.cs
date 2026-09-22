@@ -23,7 +23,8 @@ namespace ArcheCore.Client.Networking.W2C
         {
             var packet = MessagePackSerializer.Deserialize<W2CEnterWorldPacket>(reader.GetRemainingBytes());
 
-            LocalCharacterState.ApplyEnterWorld(packet.Character, packet.Gold, packet.Inventory);
+            LocalCharacterState.ApplyEnterWorld(packet.Character, packet.Gold, packet.Inventory,
+                                                packet.Health, packet.MaxHealth);
         }
     }
 }

@@ -42,6 +42,8 @@ namespace ArcheCore.Client.Networking.W2C
             identity.TemplateId = packet.TemplateId;
             identity.NpcName    = packet.Name;
             identity.Level      = packet.Level;
+            identity.Health     = packet.Health;
+            identity.MaxHealth  = packet.MaxHealth;
 
             // Without this, nothing can ever find this NPC again to move or
             // despawn it - W2CNpcPositionHandler/W2CNpcDespawnHandler both
@@ -58,6 +60,9 @@ namespace ArcheCore.Client.Networking.W2C
             interactable.InteractRange = packet.InteractRange;
             interactable.DisplayName   = packet.Name;
             interactable.ActionVerb    = "Talk to";
+            interactable.Kind          = InteractableKind.Npc;
+            interactable.Title         = packet.Title ?? string.Empty;
+            interactable.Actions       = packet.Actions ?? System.Array.Empty<ArcheCore.Network.Shared.Packets.W2C.InteractionActionData>();
 
             Debug.Log($"[SpawnNpc] Spawned '{packet.Name}' (Lv{packet.Level}) at {obj.transform.position}");
         }

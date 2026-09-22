@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using ArcheCore.Client.UI.Events;
 using ArcheCore.Network.Shared.Packets.W2C;
 using UnityEngine;
@@ -29,6 +29,10 @@ namespace ArcheCore.Client.UI.State
         public static InventorySlotData[] Inventory { get; private set; }
 
         public static int Level => Character?.Level ?? 0;
+
+        /// <summary>Your health. Arrives in W2CEnterWorld, then W2CHealthUpdate.</summary>
+        public static int Health { get; private set; }
+        public static int MaxHealth { get; private set; }
         public static string Name => Character?.Name ?? string.Empty;
 
         // itemTemplateId -> when its cooldown ends / how long it was.
@@ -48,13 +52,21 @@ namespace ArcheCore.Client.UI.State
             Inventory = null;
             HasEnteredWorld = false;
             _cooldowns.Clear();
+            Health = 0;
+            MaxHealth = 0;
+            ArcheCore.Client.Gameplay.Combat.CombatClient.Reset();
         }
 
         // ── Writes (packet handlers only) ─────────────────────────────
 
         /// <summary>W2CEnterWorld: the full initial picture.</summary>
-        public static void ApplyEnterWorld(CharacterData character, int gold, InventorySlotData[] inventory)
+        public static void ApplyEnterWorld(CharacterData character, int gold, InventorySlotData[] inventory,
+                                           int health = 0, int maxHealth = 0)
         {
+            Health = health;
+            MaxHealth = maxHealth;
+            PlayerStatEvents.RaiseHealthChanged(health, maxHealth);
+
             Character = character;
             Gold = gold;
             Inventory = inventory;
@@ -83,6 +95,14 @@ namespace ArcheCore.Client.UI.State
                 Character.Level = level;
 
             PlayerStatEvents.RaiseLevelChanged(level);
+        }
+
+        /// <summary>W2CHealthUpdate: absolute values, not a delta.</summary>
+        public static void ApplyHealth(int health, int maxHealth)
+        {
+            Health = health;
+            MaxHealth = maxHealth;
+            PlayerStatEvents.RaiseHealthChanged(health, maxHealth);
         }
 
         /// <summary>W2CGoldUpdate: absolute balance, not a delta.</summary>

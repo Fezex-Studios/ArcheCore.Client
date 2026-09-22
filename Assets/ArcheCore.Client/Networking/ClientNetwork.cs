@@ -189,6 +189,18 @@ namespace ArcheCore.Client.Networking
             // NPC shops (roadmap F)
             dispatcher.Register(Opcodes.W2CShopOpen,   new W2CShopOpenHandler());
             dispatcher.Register(Opcodes.W2CShopResult, new W2CShopResultHandler());
+
+            // Combat and loot (roadmap G/H/I)
+            dispatcher.Register(Opcodes.W2CCombatEvent,  new W2CCombatEventHandler());
+            dispatcher.Register(Opcodes.W2CHealthUpdate, new W2CHealthUpdateHandler());
+            dispatcher.Register(Opcodes.W2CSpawnCorpse,  new W2CSpawnCorpseHandler());
+
+            // Interaction rework
+            dispatcher.Register(Opcodes.W2CLootWindow,   new W2CLootWindowHandler());
+
+            // Death and respawn (roadmap J)
+            dispatcher.Register(Opcodes.W2CPlayerDeath,  new W2CPlayerDeathHandler());
+            dispatcher.Register(Opcodes.W2CRespawn,      new W2CRespawnHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
