@@ -1,53 +1,28 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
 namespace ArcheCore.Client.GameData
 {
     /// <summary>
-    /// Shared binary layout for the client's gamedata content package.
+    /// gamedata.bin layout (before encryption):
     ///
-    /// Both the write side (Editor/ArcheCoreDevTools.cs, "Export Binary" step
-    /// on the Game Data tab) and the read side (GameDataDatabase.cs at
-    /// runtime) call into this class, so the two can never drift out of
-    /// sync — there is exactly one place that knows the byte layout.
+    ///   "AGDB"  version:byte  count:int32
+    ///   per item, v1: id:int32 name:string description:string category:int32 icon:string
+    ///   per item, v2 adds: categoryName:string rarityId:int32 rarityName:string
+    ///                      rarityColor:string requiredLevel:int32 isUsable:bool consumeOnUse:bool
     ///
-    /// This is the format that gets AES-encrypted (see GameDataCrypto.cs)
-    /// before it's written to StreamingAssets / served by the Authserver.
-    /// This class itself has no idea encryption exists — it only ever reads
-    /// or writes plaintext bytes.
-    ///
-    /// Layout (BinaryWriter/BinaryReader handle endianness identically on
-    /// every platform Unity targets, so we don't need to think about it):
-    ///
-    ///   [4 bytes ]  magic         = "AGDB" (ASCII)
-    ///   [1 byte  ]  format version
-    ///   ── Items section ──
-    ///   [int32   ]  item count
-    ///   per item:
-    ///     [int32 ]  item_id
-    ///     [string]  name          .NET BinaryWriter/Reader string: a 7-bit
-    ///     [string]  description   encoded length prefix followed by UTF8
-    ///     [int32 ]  category      bytes. Handled automatically by
-    ///     [string]  icon_name     w.Write(string) / r.ReadString().
-    ///
-    /// Adding a new table later (e.g. quests, dialogue):
-    ///   1. Bump CurrentVersion.
-    ///   2. Add a WriteXxx/ReadXxx pair below, appended after the items
-    ///      section (own count + loop, same pattern as items).
-    ///   3. In ReadXxx, gate on the version byte you already read, so a
-    ///      file written by an older exporter (which won't have that
-    ///      section) doesn't blow up trying to read bytes that aren't
-    ///      there — just skip the section and return an empty result.
+    /// Strings are BinaryWriter-style (7-bit length prefix + UTF-8). The
+    /// writer is the server-side gamedata-export tool; this class must stay
+    /// in step with it. Both versions are readable, so a client can always
+    /// load an older file.
     /// </summary>
     public static class GameDataBinaryFormat
     {
         public const string Magic = "AGDB";
-        public const byte CurrentVersion = 1;
+        public const byte CurrentVersion = 2;
+        private const byte OldestReadableVersion = 1;
 
-        // ── Write (Editor only, but no UnityEditor dependency here so this
-        //    class can also be compiled into player builds without pulling
-        //    in the editor assembly) ──────────────────────────────────────
         public static void WriteItems(BinaryWriter w, IReadOnlyList<ItemRecord> items)
         {
             w.Write(Encoding.ASCII.GetBytes(Magic));
@@ -61,16 +36,17 @@ namespace ArcheCore.Client.GameData
                 w.Write(item.Description ?? string.Empty);
                 w.Write(item.Category);
                 w.Write(item.IconName ?? string.Empty);
+
+                w.Write(item.CategoryName ?? string.Empty);
+                w.Write(item.RarityId);
+                w.Write(item.RarityName ?? string.Empty);
+                w.Write(item.RarityColor ?? string.Empty);
+                w.Write(item.RequiredLevel);
+                w.Write(item.IsUsable);
+                w.Write(item.ConsumeOnUse);
             }
         }
 
-        // ── Read (runtime) ───────────────────────────────────────────────
-        /// <summary>
-        /// Parses a decrypted gamedata blob into an in-memory item lookup.
-        /// Throws InvalidDataException on a bad magic number or an
-        /// unsupported version — callers should treat that the same way
-        /// GameDataDatabase previously treated "malformed or wrong key".
-        /// </summary>
         public static Dictionary<int, ItemRecord> ReadItems(BinaryReader r)
         {
             byte[] magicBytes = r.ReadBytes(Magic.Length);
@@ -83,11 +59,12 @@ namespace ArcheCore.Client.GameData
             }
 
             byte version = r.ReadByte();
-            if (version != CurrentVersion)
+            if (version < OldestReadableVersion || version > CurrentVersion)
             {
                 throw new InvalidDataException(
                     $"Unsupported gamedata format version {version} " +
-                    $"(this build expects {CurrentVersion}).");
+                    $"(this build reads {OldestReadableVersion}-{CurrentVersion}). " +
+                    (version > CurrentVersion ? "The client is older than the data - update the client." : ""));
             }
 
             int count  = r.ReadInt32();
@@ -103,6 +80,17 @@ namespace ArcheCore.Client.GameData
                     Category    = r.ReadInt32(),
                     IconName    = r.ReadString()
                 };
+
+                if (version >= 2)
+                {
+                    item.CategoryName  = r.ReadString();
+                    item.RarityId      = r.ReadInt32();
+                    item.RarityName    = r.ReadString();
+                    item.RarityColor   = r.ReadString();
+                    item.RequiredLevel = r.ReadInt32();
+                    item.IsUsable      = r.ReadBoolean();
+                    item.ConsumeOnUse  = r.ReadBoolean();
+                }
 
                 result[item.ItemId] = item;
             }

@@ -178,6 +178,17 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CInventorySnapshot, new W2CInventorySnapshotHandler());
             dispatcher.Register(Opcodes.W2CInventorySlotChanged, new W2CInventorySlotChangedHandler());
             dispatcher.Register(Opcodes.W2CItemCooldown, new W2CItemCooldownHandler());
+
+            // Harvesting (roadmap E)
+            dispatcher.Register(Opcodes.W2CSpawnHarvestNode, new W2CSpawnHarvestNodeHandler());
+            dispatcher.Register(Opcodes.W2CHarvestNodeState, new W2CHarvestNodeStateHandler());
+            dispatcher.Register(Opcodes.W2CHarvestStarted,   new W2CHarvestStartedHandler());
+            dispatcher.Register(Opcodes.W2CHarvestCompleted, new W2CHarvestCompletedHandler());
+            dispatcher.Register(Opcodes.W2CHarvestCancelled, new W2CHarvestCancelledHandler());
+
+            // NPC shops (roadmap F)
+            dispatcher.Register(Opcodes.W2CShopOpen,   new W2CShopOpenHandler());
+            dispatcher.Register(Opcodes.W2CShopResult, new W2CShopResultHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp-Editor::ArcheCore.Editor.ArcheCoreDevToolsSettings
   plaintextDbPath: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/clientside_dev_db/_oggamedata.db
-  encryptedDbDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/encrypted_db_output
+  encryptedDbDir: C:/Users/aidan/Downloads/ArcheCore_ItemIcons_Tooltips/client/StreamingAssets/GameData
   decryptedDbOutputDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/decrypted_db_output
   serverPatchDir: 
   worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/Data/worldserver.db

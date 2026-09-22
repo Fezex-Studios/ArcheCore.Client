@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Client.UI.Events;
@@ -47,10 +49,25 @@ namespace ArcheCore.Client.UI
         [Tooltip("Releasing a drag OUTSIDE this rect asks to destroy the item. Leave empty to use `window` - override only if the visible background is a different child.")]
         [SerializeField] private RectTransform dropZone;
 
+        /// <summary>
+        /// Lets another window take over right-click while it's open - the
+        /// shop turns right-click into "sell", like every MMO vendor. Return
+        /// true to say "handled, don't use the item". Whoever sets it clears
+        /// it when they close. Shift+right-click (destroy) is never
+        /// intercepted.
+        /// </summary>
+        public static Func<InventorySlotUI, bool> RightClickInterceptor;
+
         private readonly List<InventorySlotUI> _slots = new();
         private int _selectedIndex = -1;
 
         private InventorySlotUI _dragSource;
+
+        // The ghost shows the dragged item's icon when it has one, and falls
+        // back to its own look (background colour + name label) when not.
+        private Image _ghostImage;
+        private Color _ghostColor;
+        private Sprite _ghostSprite;
         private bool _dropHandled;
 
         private static ClientNetwork Net => ClientNetwork.Instance;
@@ -110,6 +127,7 @@ namespace ArcheCore.Client.UI
         /// </summary>
         protected override void OnClosed()
         {
+            ItemTooltipUI.Hide();
             ClearSelection();
             CancelDrag();
         }
@@ -183,6 +201,9 @@ namespace ArcheCore.Client.UI
             if (Net?.ServerPeer == null || slot.IsEmpty)
                 return;
 
+            if (RightClickInterceptor != null && RightClickInterceptor(slot))
+                return;
+
             // Saves a packet the server would reject anyway. The server's
             // check is the real one.
             if (slot.IsOnCooldown)
@@ -204,8 +225,17 @@ namespace ArcheCore.Client.UI
 
             if (dragGhost != null)
             {
+                bool hasIcon = slot.IconSprite != null;
+
+                if (_ghostImage != null)
+                {
+                    _ghostImage.sprite = hasIcon ? slot.IconSprite : _ghostSprite;
+                    _ghostImage.color = hasIcon ? Color.white : _ghostColor;
+                    _ghostImage.preserveAspect = hasIcon;
+                }
+
                 if (dragGhostLabel != null)
-                    dragGhostLabel.text = slot.DisplayText;
+                    dragGhostLabel.text = hasIcon ? (slot.Quantity > 1 ? slot.Quantity.ToString() : string.Empty) : slot.DisplayText;
 
                 dragGhost.gameObject.SetActive(true);
                 MoveGhost(eventData);
@@ -300,6 +330,12 @@ namespace ArcheCore.Client.UI
             // The ghost sits under the cursor for the whole drag. If it
             // caught raycasts, the slot underneath would never receive
             // OnDrop and every drag would look like "dropped outside".
+            if (dragGhost.TryGetComponent(out _ghostImage))
+            {
+                _ghostColor = _ghostImage.color;
+                _ghostSprite = _ghostImage.sprite;
+            }
+
             var group = dragGhost.GetComponent<CanvasGroup>();
             if (group == null)
                 group = dragGhost.gameObject.AddComponent<CanvasGroup>();
