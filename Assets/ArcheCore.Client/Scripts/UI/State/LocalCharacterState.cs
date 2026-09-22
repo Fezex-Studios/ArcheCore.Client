@@ -72,6 +72,19 @@ namespace ArcheCore.Client.UI.State
             PlayerInventoryEvents.RaiseInventorySnapshot(inventory);
         }
 
+        /// <summary>
+        /// W2CPlayerLevelResponse: the level changed after entering the
+        /// world. Updates the cached CharacterData so a panel that opens
+        /// later reads the new level, not the one from login.
+        /// </summary>
+        public static void ApplyLevel(int level)
+        {
+            if (Character != null)
+                Character.Level = level;
+
+            PlayerStatEvents.RaiseLevelChanged(level);
+        }
+
         /// <summary>W2CGoldUpdate: absolute balance, not a delta.</summary>
         public static void ApplyGold(int gold)
         {

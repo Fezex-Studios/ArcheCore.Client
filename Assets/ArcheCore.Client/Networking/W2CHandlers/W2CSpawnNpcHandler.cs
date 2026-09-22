@@ -56,6 +56,8 @@ namespace ArcheCore.Client.Networking.W2C
             var interactable = obj.AddComponent<InteractableIdentity>();
             interactable.NetworkId     = packet.NetworkId;
             interactable.InteractRange = packet.InteractRange;
+            interactable.DisplayName   = packet.Name;
+            interactable.ActionVerb    = "Talk to";
 
             Debug.Log($"[SpawnNpc] Spawned '{packet.Name}' (Lv{packet.Level}) at {obj.transform.position}");
         }

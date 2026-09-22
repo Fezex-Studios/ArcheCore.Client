@@ -26,6 +26,9 @@ namespace ArcheCore.Client.UI
     ///   - Override OnClosed() to drop anything that mustn't survive
     ///     closing (a selection, a drag in progress).
     ///   - If you override Awake, call base.Awake() first.
+    ///   - A passive overlay (progress bar, tracker) should turn off
+    ///     closeOnEscape and blocksGameplayInput - set them in Reset() so
+    ///     the Inspector starts with the right values.
     ///
     /// Open with Open()/Close()/Toggle(), not Show()/Hide(). Those go
     /// through WorldUIManager, so Escape and input blocking see the
@@ -40,10 +43,10 @@ namespace ArcheCore.Client.UI
         [SerializeField] private bool startOpen;
 
         [Tooltip("Escape closes this panel when it's the topmost one open.")]
-        [SerializeField] private bool closeOnEscape = true;
+        [SerializeField] protected bool closeOnEscape = true;
 
         [Tooltip("While open, WorldUIManager.IsAnyBlockingInputOpen is true. Turn off for passive overlays.")]
-        [SerializeField] private bool blocksGameplayInput = true;
+        [SerializeField] protected bool blocksGameplayInput = true;
 
         public bool IsVisible => window != null && window.activeSelf;
         public bool CloseOnEscape => closeOnEscape;

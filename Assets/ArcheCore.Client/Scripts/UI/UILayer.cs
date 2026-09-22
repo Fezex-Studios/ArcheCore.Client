@@ -8,6 +8,7 @@ namespace ArcheCore.Client.UI
         HUD     = 0,    // always-on: health, gold, minimap, chat
         Windows = 100,  // inventory, character, quest log, admin
         Modal   = 200,  // ConfirmDialog - above every window
+        Tooltip = 250,  // ItemTooltipUI - above modals, below the drag ghost
         Drag    = 300,  // DragGhost - above everything, even modals
     }
 

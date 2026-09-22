@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -60,7 +61,11 @@ namespace ArcheCore.Client.GameData
         {
             Directory.CreateDirectory(GameDataDir);
 
-            if (!File.Exists(DbPath))
+            // A newer bundled file wins over the cached copy. Without this the
+            // cache only ever filled once: a rebuilt gamedata.bin dropped into
+            // StreamingAssets was ignored until someone deleted the cache by
+            // hand, which is exactly why new items kept showing as "#7".
+            if (!File.Exists(DbPath) || BundledIsNewerThanLocal())
                 CopyBundledToLocal();
 
             string localHash  = ReadLocalHash();
@@ -153,8 +158,36 @@ namespace ArcheCore.Client.GameData
                 return;
             }
 
-            File.Copy(BundledDbPath, DbPath);
+            File.Copy(BundledDbPath, DbPath, overwrite: true);
+
+            // Record the bundled file's hash in the same form the auth server
+            // reports (lowercase SHA-256 hex). If the auth server is serving
+            // this same file, the version check below then sees "up to date"
+            // instead of downloading an identical copy.
+            File.WriteAllText(HashPath, Sha256Hex(DbPath));
+
             Debug.Log("[GameDataBootstrap] Copied bundled gamedata.bin to persistent storage.");
+        }
+
+        private bool BundledIsNewerThanLocal()
+        {
+            if (!File.Exists(BundledDbPath) || !File.Exists(DbPath))
+                return false;
+
+            // File.Copy keeps the source's timestamp, so after a copy the two
+            // match and this stays false until the bundled file changes again.
+            return File.GetLastWriteTimeUtc(BundledDbPath) > File.GetLastWriteTimeUtc(DbPath);
+        }
+
+        private static string Sha256Hex(string path)
+        {
+            using var sha = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            byte[] hash = sha.ComputeHash(stream);
+
+            var sb = new System.Text.StringBuilder(hash.Length * 2);
+            foreach (byte b in hash) sb.Append(b.ToString("x2"));
+            return sb.ToString();
         }
 
         private string ReadLocalHash()
