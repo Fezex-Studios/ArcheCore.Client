@@ -62,6 +62,8 @@ namespace ArcheCore.Client.Networking.W2C
             interactable.InteractRange = packet.InteractRange;
             interactable.DisplayName   = packet.Name;
             interactable.ActionVerb    = "Gather";
+            interactable.Kind          = InteractableKind.HarvestNode;
+            interactable.Actions       = packet.Actions ?? System.Array.Empty<InteractionActionData>();
 
             HarvestNodeRegistry.Register(node);
             node.SetDepleted(packet.IsDepleted);

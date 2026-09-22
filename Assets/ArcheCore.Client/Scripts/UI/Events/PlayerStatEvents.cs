@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using ArcheCore.Network.Shared.Packets.W2C;
 
 namespace ArcheCore.Client.UI.Events
@@ -21,6 +21,10 @@ namespace ArcheCore.Client.UI.Events
         // from OnCharacterDataChanged for the same reason.
         public static event Action<int> OnGoldChanged;
         public static void RaiseGoldChanged(int gold) => OnGoldChanged?.Invoke(gold);
+
+        /// <summary>(health, maxHealth) - your own, not your target's.</summary>
+        public static event Action<int, int> OnHealthChanged;
+        public static void RaiseHealthChanged(int health, int maxHealth) => OnHealthChanged?.Invoke(health, maxHealth);
 
     }
 }

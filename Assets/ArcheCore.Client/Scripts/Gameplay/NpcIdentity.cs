@@ -1,4 +1,4 @@
-﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Client.Gameplay;
 using UnityEngine;
 
 /// <summary>
@@ -22,6 +22,10 @@ public class NpcIdentity : MonoBehaviour
     public int    TemplateId;
     public string NpcName;
     public int    Level;
+
+    /// <summary>Kept current by W2CCombatEvent. MaxHealth 0 = can't be attacked.</summary>
+    public int    Health;
+    public int    MaxHealth;
 
     private RemoteEntityInterpolator _interpolator;
 

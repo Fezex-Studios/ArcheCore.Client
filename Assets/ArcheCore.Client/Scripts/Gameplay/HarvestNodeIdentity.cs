@@ -37,6 +37,15 @@ namespace ArcheCore.Client.Gameplay
         {
             IsDepleted = depleted;
 
+            // Keep the interaction side in step: a depleted node drops out of
+            // F/G targeting, and its hover tooltip says why.
+            if (TryGetComponent(out ArcheCore.Client.World.InteractableIdentity interactable))
+            {
+                interactable.IsAvailable = !depleted;
+                interactable.ExtraLines.Remove("Depleted");
+                if (depleted) interactable.ExtraLines.Add("Depleted");
+            }
+
             if (HasCustomVisuals)
             {
                 if (availableVisual != null) availableVisual.SetActive(!depleted);
