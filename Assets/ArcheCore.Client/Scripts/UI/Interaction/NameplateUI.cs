@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using ArchCore.Client;
 using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.Gameplay.Combat;
+using ArcheCore.Client.Gameplay.Quests;
+using ArcheCore.Client.UI.State;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -87,7 +89,14 @@ namespace ArcheCore.Client.UI
                 {
                     if (npc == null) continue;
                     var id = npc.GetComponent<ArcheCore.Client.World.InteractableIdentity>();
-                    _subjects.Add(new Subject(npc.transform, npc.NetworkId, npc.NpcName,
+
+                    // "!" they have a quest for you, "?" you can hand one in.
+                    string marker = QuestState.MarkerFor(npc.TemplateId, LocalCharacterState.Level);
+                    string name = marker == null
+                        ? npc.NpcName
+                        : $"<color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Gold)}>{marker}</color> {npc.NpcName}";
+
+                    _subjects.Add(new Subject(npc.transform, npc.NetworkId, name,
                                               id != null ? id.Title : null,
                                               npc.Health, npc.MaxHealth, npc.MaxHealth > 0));
                 }

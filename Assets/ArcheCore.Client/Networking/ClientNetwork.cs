@@ -202,6 +202,12 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CPlayerDeath,  new W2CPlayerDeathHandler());
             dispatcher.Register(Opcodes.W2CRespawn,      new W2CRespawnHandler());
             dispatcher.Register(Opcodes.W2CNpcHealth,    new W2CNpcHealthHandler());
+
+            // Quests (roadmap K/L/M)
+            dispatcher.Register(Opcodes.W2CQuestCatalog, new W2CQuestCatalogHandler());
+            dispatcher.Register(Opcodes.W2CQuestLog,     new W2CQuestLogHandler());
+            dispatcher.Register(Opcodes.W2CQuestUpdate,  new W2CQuestUpdateHandler());
+            dispatcher.Register(Opcodes.W2CQuestOffers,  new W2CQuestOffersHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
