@@ -92,8 +92,11 @@ namespace ArcheCore.Client.Gameplay.Combat
             else if (PlayerRegistry.Instance != null &&
                      PlayerRegistry.Instance.TryGetPlayer(p.TargetId, out var hitPlayer) && hitPlayer != null)
             {
-                // A player took the hit - an NPC fighting back (roadmap J).
+                // A player took the hit - an NPC fighting back, or another
+                // player in PvP.
                 where = hitPlayer.transform.position;
+                hitPlayer.health = p.TargetHealth;
+                hitPlayer.maxHealth = p.TargetMaxHealth;
 
                 // W2CHealthUpdate carries this too, but applying it here keeps
                 // the HUD bar exactly in step with the damage number.

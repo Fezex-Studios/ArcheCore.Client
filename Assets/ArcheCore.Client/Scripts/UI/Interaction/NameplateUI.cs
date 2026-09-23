@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ArchCore.Client;
 using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.Gameplay.Combat;
 using TMPro;
@@ -12,7 +13,10 @@ namespace ArcheCore.Client.UI
     ///
     ///   enemy (can be attacked)  red name + health bar
     ///   friendly (MaxHealth 0)   green name, "&lt;Merchant&gt;" title, no bar
+    ///   another player           white name + health bar (PvP)
     ///   your current target      gold border on its bar, brighter name
+    ///
+    /// Your own character never gets one - you know where you are.
     ///
     /// Only for NPCs within maxDistance, and hidden behind the camera. Plates
     /// are pooled: one per visible NPC, reused as NPCs come and go.
@@ -33,10 +37,28 @@ namespace ArcheCore.Client.UI
         }
 
         private RectTransform _layer;
-        private readonly Dictionary<NpcIdentity, Plate> _plates = new();
+        /// <summary>One thing that gets a plate - an NPC or another player.</summary>
+        private readonly struct Subject
+        {
+            public readonly Transform Transform;
+            public readonly int NetworkId;
+            public readonly string Name;
+            public readonly string Title;
+            public readonly int Health;
+            public readonly int MaxHealth;
+            public readonly bool Hostile;
+
+            public Subject(Transform t, int id, string name, string title, int health, int maxHealth, bool hostile)
+            {
+                Transform = t; NetworkId = id; Name = name; Title = title;
+                Health = health; MaxHealth = maxHealth; Hostile = hostile;
+            }
+        }
+
+        private readonly Dictionary<Transform, Plate> _plates = new();
         private readonly Stack<Plate> _pool = new();
-        private readonly List<NpcIdentity> _npcs = new();
-        private readonly List<NpcIdentity> _gone = new();
+        private readonly List<Subject> _subjects = new();
+        private readonly List<Transform> _gone = new();
         private float _nextScan;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -59,59 +81,79 @@ namespace ArcheCore.Client.UI
             if (Time.unscaledTime >= _nextScan)
             {
                 _nextScan = Time.unscaledTime + rescanInterval;
-                _npcs.Clear();
-                _npcs.AddRange(FindObjectsByType<NpcIdentity>(FindObjectsSortMode.None));
+                _subjects.Clear();
+
+                foreach (var npc in FindObjectsByType<NpcIdentity>(FindObjectsSortMode.None))
+                {
+                    if (npc == null) continue;
+                    var id = npc.GetComponent<ArcheCore.Client.World.InteractableIdentity>();
+                    _subjects.Add(new Subject(npc.transform, npc.NetworkId, npc.NpcName,
+                                              id != null ? id.Title : null,
+                                              npc.Health, npc.MaxHealth, npc.MaxHealth > 0));
+                }
+
+                // Other players (PvP). Never the local one.
+                int localId = CombatClient.LocalPlayerId;
+                foreach (var pc in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+                {
+                    if (pc == null || pc.isLocalPlayer || pc.networkId == localId) continue;
+                    _subjects.Add(new Subject(pc.transform, pc.networkId,
+                                              string.IsNullOrEmpty(pc.playerName) ? "Player" : pc.playerName,
+                                              null, pc.health, pc.maxHealth, false));
+                }
             }
 
             var cam = Camera.main;
             if (cam == null) return;
             Vector3 camPos = cam.transform.position;
 
-            // Retire plates whose NPC is gone.
+            // Retire plates whose subject is gone.
             _gone.Clear();
             foreach (var kv in _plates) if (kv.Key == null) _gone.Add(kv.Key);
             foreach (var dead in _gone) Release(dead);
 
-            foreach (var npc in _npcs)
+            foreach (var subject in _subjects)
             {
-                if (npc == null) continue;
+                if (subject.Transform == null) continue;
 
-                Vector3 head = npc.transform.position + Vector3.up * heightAboveFeet;
+                Vector3 head = subject.Transform.position + Vector3.up * heightAboveFeet;
                 Vector3 screen = cam.WorldToScreenPoint(head);
                 bool visible = screen.z > 0f && Vector3.Distance(camPos, head) <= maxDistance;
 
-                if (!visible) { if (_plates.ContainsKey(npc)) Release(npc); continue; }
+                if (!visible) { if (_plates.ContainsKey(subject.Transform)) Release(subject.Transform); continue; }
 
-                if (!_plates.TryGetValue(npc, out var plate))
+                if (!_plates.TryGetValue(subject.Transform, out var plate))
                 {
                     plate = Acquire();
-                    _plates[npc] = plate;
+                    _plates[subject.Transform] = plate;
                 }
 
-                Draw(plate, npc);
+                Draw(plate, subject);
 
                 if (RuntimeUI.ScreenToLocal(_layer, screen, out var local))
                     plate.Root.anchoredPosition = local;
             }
         }
 
-        private void Draw(Plate p, NpcIdentity npc)
+        private void Draw(Plate p, Subject subject)
         {
-            bool hostile = npc.MaxHealth > 0;
-            bool selected = CombatClient.TargetId == npc.NetworkId;
+            bool selected = CombatClient.TargetId == subject.NetworkId;
+            bool showBar = subject.MaxHealth > 0;
 
-            Color c = hostile ? RuntimeUI.Hostile : RuntimeUI.Friendly;
+            Color c = subject.Hostile ? RuntimeUI.Hostile
+                    : subject.Title != null || !showBar ? RuntimeUI.Friendly
+                    : RuntimeUI.Text;   // another player
             if (selected) c = Color.Lerp(c, Color.white, 0.35f);
             p.Name.color = c;
 
-            var id = npc.GetComponent<ArcheCore.Client.World.InteractableIdentity>();
-            string title = id != null ? id.Title : null;
-            p.Name.text = string.IsNullOrEmpty(title) ? npc.NpcName : $"<size=80%>&lt;{title}&gt;</size>\n{npc.NpcName}";
+            p.Name.text = string.IsNullOrEmpty(subject.Title)
+                ? subject.Name
+                : $"<size=80%>&lt;{subject.Title}&gt;</size>\n{subject.Name}";
 
-            p.BarBack.gameObject.SetActive(hostile);
-            if (hostile)
+            p.BarBack.gameObject.SetActive(showBar);
+            if (showBar)
             {
-                float pct = Mathf.Clamp01(npc.MaxHealth > 0 ? (float)npc.Health / npc.MaxHealth : 0f);
+                float pct = Mathf.Clamp01((float)subject.Health / subject.MaxHealth);
                 p.BarFill.anchorMax = new Vector2(pct, 1f);
                 p.Border.effectColor = selected ? RuntimeUI.Gold : new Color(0f, 0f, 0f, 0.8f);
                 p.Border.effectDistance = selected ? new Vector2(2f, -2f) : new Vector2(1f, -1f);
@@ -149,10 +191,10 @@ namespace ArcheCore.Client.UI
             return new Plate { Root = root, Name = name, BarBack = br, BarFill = fill.rectTransform, Border = border };
         }
 
-        private void Release(NpcIdentity npc)
+        private void Release(Transform subject)
         {
-            if (!_plates.TryGetValue(npc, out var plate)) return;
-            _plates.Remove(npc);
+            if (!_plates.TryGetValue(subject, out var plate)) return;
+            _plates.Remove(subject);
             plate.Root.gameObject.SetActive(false);
             _pool.Push(plate);
         }

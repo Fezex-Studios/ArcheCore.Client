@@ -46,6 +46,13 @@ namespace ArcheCore.Client.Networking.W2C
                 new Vector3(packet.x, packet.y, packet.z),
                 packet.IsLocalPlayer);
 
+            if (pc != null)
+            {
+                pc.playerName = packet.Name;
+                pc.health = packet.Health;
+                pc.maxHealth = packet.MaxHealth;
+            }
+
             if (packet.IsLocalPlayer && pc != null)
             {
                 ClientNetwork.Instance.LocalPlayer = pc;

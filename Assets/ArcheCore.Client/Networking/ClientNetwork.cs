@@ -201,6 +201,7 @@ namespace ArcheCore.Client.Networking
             // Death and respawn (roadmap J)
             dispatcher.Register(Opcodes.W2CPlayerDeath,  new W2CPlayerDeathHandler());
             dispatcher.Register(Opcodes.W2CRespawn,      new W2CRespawnHandler());
+            dispatcher.Register(Opcodes.W2CNpcHealth,    new W2CNpcHealthHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

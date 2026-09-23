@@ -4,6 +4,7 @@ using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Client.UI;
 using ArcheCore.Client.UI.State;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ArcheCore.Client.Gameplay.Combat
@@ -44,17 +45,18 @@ namespace ArcheCore.Client.Gameplay.Combat
 
             FindInteraction();
 
-            // Target whatever NPC you click on - enemies and friendly NPCs alike
-            // (the frame shows both; only enemies can be attacked).
+            // Target whatever you click on: enemies, friendly NPCs, and other
+            // players (PvP). The frame shows all three; the server decides
+            // what may actually be attacked.
             if (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
             {
-                int hovered = HoveredNpc();
+                int hovered = HoveredTarget();
                 if (hovered != 0)
                     CombatClient.SetTarget(hovered);
             }
 
             // Target walked out of view or died - drop it.
-            if (CombatClient.TargetId != 0 && !IsLiveNpc(CombatClient.TargetId))
+            if (CombatClient.TargetId != 0 && !IsLiveTarget(CombatClient.TargetId))
                 CombatClient.SetTarget(0);
 
             if (CombatClient.TargetId != 0)
@@ -70,6 +72,8 @@ namespace ArcheCore.Client.Gameplay.Combat
         private void TryAttack()
         {
             int target = HoveredAttackableNpc();
+            if (target == 0 && IsOtherPlayer(HoveredTarget()))
+                target = HoveredTarget();
             if (target == 0)
                 target = CombatClient.TargetId;
 
@@ -81,7 +85,10 @@ namespace ArcheCore.Client.Gameplay.Combat
 
             CombatClient.SetTarget(target);
 
-            if (!IsAttackableNpc(target))
+            // Players are attackable as far as the client is concerned - PvP
+            // rules and safe zones are the server's call, and it answers with
+            // a message if the answer is no.
+            if (!IsAttackableNpc(target) && !IsOtherPlayer(target))
             {
                 HudMessageDisplay.QueueOrShow("You can't attack that.");
                 return;
@@ -112,11 +119,41 @@ namespace ArcheCore.Client.Gameplay.Combat
             return focus != null && IsAttackableNpc(focus.NetworkId) ? focus.NetworkId : 0;
         }
 
-        private int HoveredNpc()
+        private int HoveredTarget()
         {
             var focus = _interaction != null ? _interaction.CurrentFocus : null;
-            return focus != null && IsLiveNpc(focus.NetworkId) ? focus.NetworkId : 0;
+            if (focus != null && (IsLiveNpc(focus.NetworkId) || IsOtherPlayer(focus.NetworkId)))
+                return focus.NetworkId;
+
+            // Players carry no InteractableIdentity and aren't on the
+            // interact layer, so PlayerInteraction never sees them - they
+            // need a raycast of their own.
+            return HoveredPlayer();
         }
+
+        private static int HoveredPlayer()
+        {
+            var cam = Camera.main;
+            var mouse = Mouse.current;
+            if (cam == null || mouse == null) return 0;
+
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return 0;
+
+            if (!Physics.Raycast(cam.ScreenPointToRay(mouse.position.ReadValue()), out var hit, 100f))
+                return 0;
+
+            var pc = hit.collider.GetComponentInParent<ArchCore.Client.PlayerController>();
+            return pc != null && pc.networkId != CombatClient.LocalPlayerId ? pc.networkId : 0;
+        }
+
+        private static bool IsOtherPlayer(int networkId) =>
+            networkId != 0 &&
+            networkId != CombatClient.LocalPlayerId &&
+            PlayerRegistry.Instance != null &&
+            PlayerRegistry.Instance.TryGetPlayer(networkId, out var pc) && pc != null;
+
+        private static bool IsLiveTarget(int networkId) => IsLiveNpc(networkId) || IsOtherPlayer(networkId);
 
         private static bool IsLiveNpc(int networkId) =>
             NpcRegistry.Instance != null &&

@@ -1,4 +1,4 @@
-﻿using ArcheCore.Client.Gameplay;
+using ArcheCore.Client.Gameplay;
 using ArcheCore.Client.Movement;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2W;
@@ -33,6 +33,16 @@ namespace ArchCore.Client
     {
         public bool isLocalPlayer;
         public int networkId;
+
+        /// <summary>Character name, from W2CSpawnPlayer - for the nameplate.</summary>
+        public string playerName;
+
+        /// <summary>
+        /// Kept current by W2CCombatEvent for anyone you can see fighting.
+        /// MaxHealth 0 means the server never told us (an older spawn packet).
+        /// </summary>
+        public int health;
+        public int maxHealth;
 
         private const float SendRate = 0.05f;
         private const float YawSendThresholdDegrees = 4f;

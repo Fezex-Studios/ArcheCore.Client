@@ -145,31 +145,53 @@ namespace ArcheCore.Client.UI
         private void Refresh()
         {
             int id = CombatClient.TargetId;
-            bool has = id != 0 && NpcRegistry.Instance != null &&
-                       NpcRegistry.Instance.TryGetNpc(id, out var npc) && npc != null;
 
+            // A target is an NPC or another player; both get the same frame.
+            string label = null;
+            int health = 0, maxHealth = 0;
+            Transform where = null;
+
+            if (id != 0 && NpcRegistry.Instance != null &&
+                NpcRegistry.Instance.TryGetNpc(id, out var npcTarget) && npcTarget != null)
+            {
+                label = $"<color=#{ColorUtility.ToHtmlStringRGB(levelColor)}>{npcTarget.Level}</color>  {npcTarget.NpcName}";
+                health = npcTarget.Health;
+                maxHealth = npcTarget.MaxHealth;
+                where = npcTarget.transform;
+            }
+            else if (id != 0 && PlayerRegistry.Instance != null &&
+                     PlayerRegistry.Instance.TryGetPlayer(id, out var playerTarget) && playerTarget != null)
+            {
+                label = string.IsNullOrEmpty(playerTarget.playerName) ? "Player" : playerTarget.playerName;
+                health = playerTarget.health;
+                maxHealth = playerTarget.maxHealth;
+                where = playerTarget.transform;
+            }
+
+            bool has = label != null;
             if (_panel.gameObject.activeSelf != has)
                 _panel.gameObject.SetActive(has);
             if (!has)
                 return;
 
-            NpcRegistry.Instance.TryGetNpc(id, out var target);
+            _name.text = label;
 
-            _name.text = $"<color=#{ColorUtility.ToHtmlStringRGB(levelColor)}>{target.Level}</color>  {target.NpcName}";
-
-            // Friendly NPCs (MaxHealth 0) get the frame without a health bar.
-            _barBack.gameObject.SetActive(target.MaxHealth > 0);
+            // No bar for something with no health to show (a friendly NPC, or
+            // a player the server hasn't told us about yet).
+            _barBack.gameObject.SetActive(maxHealth > 0);
 
             if (_player == null)
             {
                 var pi = FindFirstObjectByType<ArchCore.Client.PlayerInteraction>();
                 if (pi != null) _player = pi.transform;
             }
-            _distance.text = _player != null ? $"{Vector3.Distance(_player.position, target.transform.position):F1} m" : "";
+            _distance.text = _player != null && where != null
+                ? $"{Vector3.Distance(_player.position, where.position):F1} m"
+                : "";
 
-            float pct = target.MaxHealth > 0 ? Mathf.Clamp01((float)target.Health / target.MaxHealth) : 0f;
+            float pct = maxHealth > 0 ? Mathf.Clamp01((float)health / maxHealth) : 0f;
             _fill.anchorMax = new Vector2(pct, 1f);
-            _hp.text = target.MaxHealth > 0 ? $"{target.Health} / {target.MaxHealth}" : "";
+            _hp.text = maxHealth > 0 ? $"{health} / {maxHealth}" : "";
         }
     }
 }
