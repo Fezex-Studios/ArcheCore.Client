@@ -8655,6 +8655,8 @@ MonoBehaviour:
     Prefab: {fileID: 9005873577364663104, guid: f5a7a305ba14d0b47a9b5b87f396a71a, type: 3}
   - Type: OakTree
     Prefab: {fileID: 6829255798857443147, guid: b771699a3af23cb478dd621b23c9da0e, type: 3}
+  - Type: Mount_Horse
+    Prefab: {fileID: 5083510758565989122, guid: 62a538190f85b2d47a931777b1e88958, type: 3}
 --- !u!4 &1707228488
 Transform:
   m_ObjectHideFlags: 0

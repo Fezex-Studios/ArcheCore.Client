@@ -46,6 +46,12 @@ namespace ArcheCore.Client.Networking.W2C
                 new Vector3(packet.x, packet.y, packet.z),
                 packet.IsLocalPlayer);
 
+            if (pc != null && !string.IsNullOrEmpty(packet.MountModelType))
+            {
+                // Already riding when they came into view.
+                ArcheCore.Client.Gameplay.Mounts.MountVisuals.Apply(packet.NetworkId, packet.MountModelType, 1f);
+            }
+
             if (pc != null)
             {
                 pc.playerName = packet.Name;

@@ -208,6 +208,9 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CQuestLog,     new W2CQuestLogHandler());
             dispatcher.Register(Opcodes.W2CQuestUpdate,  new W2CQuestUpdateHandler());
             dispatcher.Register(Opcodes.W2CQuestOffers,  new W2CQuestOffersHandler());
+
+            // Mounts (roadmap N)
+            dispatcher.Register(Opcodes.W2CMountState,   new W2CMountStateHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
