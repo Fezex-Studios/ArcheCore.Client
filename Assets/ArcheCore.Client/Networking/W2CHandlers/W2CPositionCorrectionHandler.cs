@@ -3,6 +3,7 @@ using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -37,7 +38,7 @@ namespace ArcheCore.Client.Networking.W2C
             if (local == null)
                 return;
 
-            local.ForcePosition(new Vector3(packet.x, packet.y, packet.z));
+            local.ForcePosition(WorldOrigin.ToLocal(packet.x, packet.y, packet.z));
         }
     }
 }

@@ -40,7 +40,7 @@ namespace ArcheCore.Client.Networking.W2C
 
             var obj = Object.Instantiate(
                 prefab,
-                new Vector3(packet.X, packet.Y, packet.Z),
+                WorldOrigin.ToLocal(packet.X, packet.Y, packet.Z),
                 Quaternion.Euler(0f, packet.Yaw, 0f));
 
             obj.name = $"{packet.Name}_{packet.NetworkId}";

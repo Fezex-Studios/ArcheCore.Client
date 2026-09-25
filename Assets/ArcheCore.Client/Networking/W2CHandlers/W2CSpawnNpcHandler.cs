@@ -33,7 +33,7 @@ namespace ArcheCore.Client.Networking.W2C
                 return; // GetPrefab already logged the missing ModelType
 
             var obj = Object.Instantiate(prefab);
-            obj.transform.position = new Vector3(packet.X, packet.Y, packet.Z);
+            obj.transform.position = WorldOrigin.ToLocal(packet.X, packet.Y, packet.Z);
             obj.name = $"{packet.Name}_{packet.NetworkId}";
 
             // Attach an identity component so other systems can reference this NPC

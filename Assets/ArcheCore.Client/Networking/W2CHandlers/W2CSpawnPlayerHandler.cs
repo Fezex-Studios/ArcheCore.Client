@@ -6,6 +6,7 @@ using LiteNetLib;
 using MessagePack;
 using ArcheCore.Network.Shared.Packets.W2C;
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -41,9 +42,12 @@ namespace ArcheCore.Client.Networking.W2C
                 return;
             }
 
+            // World (server) space -> Unity space, here at the last moment
+            // rather than when the packet arrived: a floating-origin shift can
+            // happen while this sits in WorldLoader's queue.
             PlayerController pc = registry.Spawn(
                 packet.NetworkId,
-                new Vector3(packet.x, packet.y, packet.z),
+                WorldOrigin.ToLocal(packet.x, packet.y, packet.z),
                 packet.IsLocalPlayer);
 
             if (pc != null && !string.IsNullOrEmpty(packet.MountModelType))

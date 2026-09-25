@@ -4,6 +4,7 @@ using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.Networking.W2C;
 using ArcheCore.Client.UI.Events;
 using ArcheCore.Client.UI.State;
+using ArcheCore.Client.World;
 using ArcheCore.Library.Net.Worldserver;
 using ArcheCore.Network.Client;
 using LiteNetLib;
@@ -121,6 +122,11 @@ namespace ArcheCore.Client.Networking
             W2CWorldSnapshotHandler.Reset();
             WorldLoader.ClearPending();
             LocalCharacterState.Reset();
+
+            // A new shard session starts unshifted and learns its layout
+            // again from EnterWorld.
+            WorldOrigin.Reset();
+            WorldSettings.Reset();
 
             client.Connect(ip, WorldServerPort, ConnectionKey);
         }

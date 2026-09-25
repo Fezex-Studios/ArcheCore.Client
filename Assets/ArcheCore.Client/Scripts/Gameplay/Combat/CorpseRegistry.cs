@@ -22,7 +22,7 @@ namespace ArcheCore.Client.Gameplay.Combat
         {
             Despawn(p.NetworkId);
 
-            var pos = new Vector3(p.X, p.Y, p.Z);
+            var pos = WorldOrigin.ToLocal(p.X, p.Y, p.Z);
             GameObject obj = null;
 
             var prefabs = WorldObjectPrefabRegistry.Instance;

@@ -3,6 +3,7 @@ using ArcheCore.Network.Client;
 using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -22,6 +23,9 @@ namespace ArcheCore.Client.Networking.W2C
         public void Handle(NetPacketReader reader)
         {
             var packet = MessagePackSerializer.Deserialize<W2CEnterWorldPacket>(reader.GetRemainingBytes());
+
+            // The shard's layout first - streaming and debug gizmos read it.
+            WorldSettings.Apply(packet.World);
 
             LocalCharacterState.ApplyEnterWorld(packet.Character, packet.Gold, packet.Inventory,
                                                 packet.Health, packet.MaxHealth);

@@ -251,6 +251,33 @@ namespace ArcheCore.Client.Gameplay
         /// the fallback extrapolation is running. Should be rare.</summary>
         public bool IsExtrapolating { get; private set; }
 
+        private void OnEnable()
+        {
+            ArcheCore.Client.World.WorldOrigin.Shifted += OnWorldShifted;
+        }
+
+        private void OnDisable()
+        {
+            ArcheCore.Client.World.WorldOrigin.Shifted -= OnWorldShifted;
+        }
+
+        /// <summary>
+        /// The floating origin moved the world. The transform moved with it;
+        /// the buffered samples are plain structs it couldn't see, and
+        /// rendering from them unshifted would snap this entity back by the
+        /// shift distance on the next frame. Only X/Z ever shift, so the
+        /// jump arc (all Y) needs nothing.
+        /// </summary>
+        private void OnWorldShifted(Vector3 localDelta)
+        {
+            for (int i = 0; i < _buffer.Count; i++)
+            {
+                var sample = _buffer[i];
+                sample.Position += localDelta;
+                _buffer[i] = sample;
+            }
+        }
+
         public void Initialize(Vector3 position, float yawDegrees)
         {
             transform.position = position;
