@@ -211,6 +211,12 @@ namespace ArcheCore.Client.Networking
 
             // Mounts (roadmap N)
             dispatcher.Register(Opcodes.W2CMountState,   new W2CMountStateHandler());
+
+            // Market: auction house, cash shop, mailboxes (roadmap P)
+            dispatcher.Register(Opcodes.W2CMailList,     new W2CMailListHandler());
+            dispatcher.Register(Opcodes.W2CAuctionList,  new W2CAuctionListHandler());
+            dispatcher.Register(Opcodes.W2CCashShopList, new W2CCashShopListHandler());
+            dispatcher.Register(Opcodes.W2CMarketResult, new W2CMarketResultHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)
