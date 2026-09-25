@@ -1,4 +1,5 @@
 using ArchCore.Client;
+using ArcheCore.Client.Movement;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Client.UI;
@@ -31,7 +32,8 @@ namespace ArcheCore.Client.Gameplay.Interaction
     {
         public static InteractableIdentity CurrentTarget { get; private set; }
 
-        [SerializeField] private Key[] actionKeys = { Key.F, Key.G };
+        // Slot hotkeys are GameHotkeys.InteractPrimary / InteractSecondary
+        // (rebindable, default F / G).
 
         [Tooltip("How much being in front of the camera beats being slightly closer. 0 = nearest wins, always.")]
         [SerializeField] private float facingWeight = 1.5f;
@@ -67,12 +69,11 @@ namespace ArcheCore.Client.Gameplay.Interaction
             if (WorldUIManager.IsTypingInField)
                 return;
 
-            var keyboard = Keyboard.current;
-            if (keyboard != null && CurrentTarget != null)
+            if (CurrentTarget != null)
             {
-                for (int slot = 0; slot < actionKeys.Length; slot++)
+                for (int slot = 0; slot < GameHotkeys.InteractSlotCount; slot++)
                 {
-                    if (keyboard[actionKeys[slot]].wasPressedThisFrame && slot < CurrentTarget.Actions.Length)
+                    if (GameHotkeys.Pressed(GameHotkeys.InteractSlot(slot)) && slot < CurrentTarget.Actions.Length)
                     {
                         Perform(CurrentTarget, CurrentTarget.Actions[slot]);
                         break;

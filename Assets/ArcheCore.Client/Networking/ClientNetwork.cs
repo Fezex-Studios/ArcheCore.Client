@@ -23,7 +23,6 @@ namespace ArcheCore.Client.Networking
         public const string ServerSelectSceneName = "server_select";
 
         private const int WorldServerPort = 7777;
-        private const string ConnectionKey = "MMO";
 
 #if UNITY_EDITOR
         [Header("Editor Testing Only - not used in builds")]
@@ -129,7 +128,7 @@ namespace ArcheCore.Client.Networking
             WorldOrigin.Reset();
             WorldSettings.Reset();
 
-            client.Connect(ip, WorldServerPort, ConnectionKey);
+            client.Connect(ip, WorldServerPort, ArcheCore.Network.Shared.ProtocolVersion.ConnectionKey);
         }
 
         private void OnDestroy()
@@ -321,6 +320,12 @@ namespace ArcheCore.Client.Networking
                 case DisconnectReason.NetworkUnreachable:
                     return "Network unreachable. Check your connection.";
                 case DisconnectReason.ConnectionRejected:
+                    // The server says why (e.g. protocol version mismatch).
+                    if (info.AdditionalData != null && info.AdditionalData.AvailableBytes > 0)
+                    {
+                        try { return info.AdditionalData.GetString(); }
+                        catch { /* fall through to the generic message */ }
+                    }
                     return "The world server rejected the connection (client may be out of date).";
                 case DisconnectReason.RemoteConnectionClose:
                     return "Disconnected by the server. Your session may have expired or you logged in elsewhere. Please log in again.";

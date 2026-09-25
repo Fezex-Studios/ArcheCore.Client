@@ -1,4 +1,5 @@
 using ArchCore.Client;
+using ArcheCore.Client.Movement;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Client.UI;
@@ -22,7 +23,7 @@ namespace ArcheCore.Client.Gameplay.Combat
     /// </summary>
     public class CombatController : MonoBehaviour
     {
-        [SerializeField] private Key attackKey = Key.Digit1;
+        // The attack key is GameHotkeys.Attack (rebindable, default 1).
 
         private PlayerInteraction _interaction;
         private float _nextSearch;
@@ -62,8 +63,7 @@ namespace ArcheCore.Client.Gameplay.Combat
             if (CombatClient.TargetId != 0)
                 TargetFrameUI.EnsureInstance();
 
-            var keyboard = Keyboard.current;
-            if (keyboard == null || !keyboard[attackKey].wasPressedThisFrame || WorldUIManager.IsTypingInField)
+            if (!GameHotkeys.Pressed(GameHotkeys.Attack) || WorldUIManager.IsTypingInField)
                 return;
 
             TryAttack();

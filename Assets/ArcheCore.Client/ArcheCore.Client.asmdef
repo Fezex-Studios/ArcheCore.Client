@@ -1,0 +1,23 @@
+{
+    "name": "ArcheCore.Client",
+    "rootNamespace": "ArcheCore.Client",
+    "references": [
+        "MoonSharp",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.InputSystem",
+        "Unity.Cinemachine",
+        "MessagePack",
+        "MessagePack.Annotations",
+        "LiteNetLib"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

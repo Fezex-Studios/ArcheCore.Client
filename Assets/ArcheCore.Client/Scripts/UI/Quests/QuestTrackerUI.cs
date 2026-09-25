@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using ArcheCore.Client.Gameplay.Quests;
+using ArcheCore.Client.Movement;
 using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Network.Shared.Packets.W2C;
@@ -25,7 +26,7 @@ namespace ArcheCore.Client.UI
     /// </summary>
     public class QuestTrackerUI : MonoBehaviour
     {
-        [SerializeField] private Key toggleKey = Key.L;
+        // Toggle key: GameHotkeys.ToggleQuestTracker (rebindable, default L).
         [SerializeField] private float width = 260f;
         [SerializeField] private float topOffset = 90f;
 
@@ -53,8 +54,7 @@ namespace ArcheCore.Client.UI
                 Rebuild();
             }
 
-            var keyboard = Keyboard.current;
-            if (keyboard == null || !keyboard[toggleKey].wasPressedThisFrame || WorldUIManager.IsTypingInField)
+            if (!GameHotkeys.Pressed(GameHotkeys.ToggleQuestTracker) || WorldUIManager.IsTypingInField)
                 return;
 
             _hidden = !_hidden;
