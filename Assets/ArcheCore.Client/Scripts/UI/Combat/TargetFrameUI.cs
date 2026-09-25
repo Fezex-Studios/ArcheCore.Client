@@ -174,7 +174,7 @@ namespace ArcheCore.Client.UI
             if (!has)
                 return;
 
-            _name.text = label;
+            _name.text = RichText.Safe(label);
 
             // No bar for something with no health to show (a friendly NPC, or
             // a player the server hasn't told us about yet).

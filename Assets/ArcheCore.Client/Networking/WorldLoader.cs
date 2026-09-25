@@ -174,17 +174,20 @@ namespace ArcheCore.Client.Networking
         /// </summary>
         private static void EnsureWorldStreaming()
         {
-            if (WorldStreamer.Instance != null && FloatingOrigin.Instance != null)
+            if (WorldStreamer.Instance != null && FloatingOrigin.Instance != null && ZoneTracker.Instance != null)
                 return;
 
             GameObject host = WorldStreamer.Instance != null
                 ? WorldStreamer.Instance.gameObject
                 : FloatingOrigin.Instance != null
                     ? FloatingOrigin.Instance.gameObject
-                    : new GameObject("[World Streaming]");
+                    : ZoneTracker.Instance != null
+                        ? ZoneTracker.Instance.gameObject
+                        : new GameObject("[World Streaming]");
 
             if (WorldStreamer.Instance == null) host.AddComponent<WorldStreamer>();
             if (FloatingOrigin.Instance == null) host.AddComponent<FloatingOrigin>();
+            if (ZoneTracker.Instance == null) host.AddComponent<ZoneTracker>();
         }
 
         /// <summary>A disconnect arrived during the load - go there instead of flushing.</summary>

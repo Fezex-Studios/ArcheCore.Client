@@ -156,8 +156,8 @@ namespace ArcheCore.Client.UI
             p.Name.color = c;
 
             p.Name.text = string.IsNullOrEmpty(subject.Title)
-                ? subject.Name
-                : $"<size=80%>&lt;{subject.Title}&gt;</size>\n{subject.Name}";
+                ? RichText.Safe(subject.Name)
+                : $"<size=80%>&lt;{subject.Title}&gt;</size>\n{RichText.Safe(subject.Name)}";
 
             p.BarBack.gameObject.SetActive(showBar);
             if (showBar)

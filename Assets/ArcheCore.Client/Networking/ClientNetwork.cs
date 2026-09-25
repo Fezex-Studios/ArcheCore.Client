@@ -108,7 +108,8 @@ namespace ArcheCore.Client.Networking
                 return;
             }
 
-            client = new NetManager(this);
+            // Must match the server: world / bulk UI / chat channels (audit M4).
+            client = new NetManager(this) { ChannelsCount = ArcheCore.Network.Shared.PacketChannels.Count };
 
             if (!client.Start())
             {
@@ -163,6 +164,7 @@ namespace ArcheCore.Client.Networking
 
             // Character roster after authentication
             dispatcher.Register(Opcodes.W2CCharacterList, new W2CCharacterListHandler());
+            dispatcher.Register(Opcodes.W2CCreateCharacterFailed, new W2CCreateCharacterFailedHandler());
 
             // --- Interaction system ---
             dispatcher.Register(Opcodes.W2CInteractDialogue, new W2CInteractDialogueHandler());

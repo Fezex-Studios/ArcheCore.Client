@@ -16,5 +16,11 @@ namespace ArcheCore.Client.UI
         public static event Action<CharacterSummary[]> OnCharacterListReceived;
         public static void RaiseCharacterListReceived(CharacterSummary[] characters) =>
             OnCharacterListReceived?.Invoke(characters);
+
+        // The server refused a create (name taken, reserved, not allowed).
+        // CharacterCreateUI shows the reason and re-enables the button.
+        public static event Action<string> OnCreateCharacterFailed;
+        public static void RaiseCreateCharacterFailed(string reason) =>
+            OnCreateCharacterFailed?.Invoke(reason);
     }
 }

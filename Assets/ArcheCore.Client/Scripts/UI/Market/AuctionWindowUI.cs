@@ -131,7 +131,7 @@ namespace ArcheCore.Client.UI
             text.text = $"{listing.ItemName}{quantity}   " +
                         $"<color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Gold)}>{listing.Price}g</color>\n" +
                         $"<size=85%><color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Muted)}>" +
-                        $"{listing.SellerName} · {listing.MinutesLeft}m left</color></size>";
+                        $"{RichText.Safe(listing.SellerName)} · {listing.MinutesLeft}m left</color></size>";
 
             var action = RuntimeUI.NewPanel("Action", row.rectTransform, raycast: true);
             var ar = action.rectTransform;

@@ -143,7 +143,7 @@ namespace ArcheCore.Client.UI
         private void HandleIncoming(W2CChatMessagePacket packet)
         {
             string color = _channelColors.TryGetValue(packet.Channel, out var c) ? c : "#FFFFFF";
-            chatLog.text += $"\n<color={color}>[{packet.SenderName}]: {packet.Message}</color>";
+            chatLog.text += $"\n<color={color}>[{RichText.Safe(packet.SenderName)}]: {RichText.Safe(packet.Message)}</color>";
 
             Canvas.ForceUpdateCanvases();
             scrollRect.verticalNormalizedPosition = 0f; // 0 = scrolled to bottom

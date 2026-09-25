@@ -33,7 +33,6 @@ namespace ArcheCore.Client.Networking
     public static class SnapshotReader
     {
         private const float PositionScale = 64f;
-        private const float VelocityScale = 4f;
         private const int HeaderSize = 20;
 
         [Flags]
@@ -160,10 +159,12 @@ namespace ArcheCore.Client.Networking
                     // Signed bytes. The cast from byte is unchecked by
                     // default in C#, which is what we want - 0xFF has to
                     // come back as -1, not 255.
+                    // Square-root curve up to 100 u/s, shared with the
+                    // server's writer (VelocityCodec, audit M8).
                     velocity = new Vector3(
-                        (sbyte)payload[offset]     / VelocityScale,
-                        (sbyte)payload[offset + 1] / VelocityScale,
-                        (sbyte)payload[offset + 2] / VelocityScale);
+                        ArcheCore.Network.Shared.VelocityCodec.Decode((sbyte)payload[offset]),
+                        ArcheCore.Network.Shared.VelocityCodec.Decode((sbyte)payload[offset + 1]),
+                        ArcheCore.Network.Shared.VelocityCodec.Decode((sbyte)payload[offset + 2]));
 
                     offset += 3;
                 }

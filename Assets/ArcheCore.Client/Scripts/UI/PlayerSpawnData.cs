@@ -52,7 +52,7 @@ namespace ArcheCore.Client.UI
             SetLevel(data.Level);
 
             if (playerName != null)
-                playerName.text = data.Name;
+                playerName.text = RichText.Safe(data.Name);
         }
 
         private void SetLevel(int level)

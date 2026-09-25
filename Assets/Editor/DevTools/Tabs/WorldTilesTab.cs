@@ -263,17 +263,29 @@ namespace ArcheCore.Editor.DevTools.Tabs
                 bool has = existing.Contains(tile);
                 bool isOpen = open.Contains(tile);
 
-                Handles.color = isOpen ? new Color(0.3f, 0.75f, 1f, 0.95f)
-                              : has    ? new Color(0.3f, 0.75f, 1f, 0.35f)
-                                       : new Color(0.7f, 0.7f, 0.7f, 0.2f);
+                // Each edge is drawn once, by the tile north/east of it, in the
+                // BRIGHTER of the two tiles' colours - so an open tile is
+                // outlined bright on all four sides, whatever its neighbours are.
+                int self = TileState(tile, existing, open);
+                int south = TileState(new TileCoord(tile.X, tile.Z - 1), existing, open);
+                int west = TileState(new TileCoord(tile.X - 1, tile.Z), existing, open);
 
-                // Only the south and west edges per tile - the neighbours draw
-                // the other two, so shared edges aren't drawn twice. The outer
-                // ring closes the block.
+                Handles.color = StateColor(Mathf.Max(self, south));
                 DrawGroundEdge(terrains, edge, x0, z0, x0 + size, z0, steps, Lift);
+                Handles.color = StateColor(Mathf.Max(self, west));
                 DrawGroundEdge(terrains, edge, x0, z0, x0, z0 + size, steps, Lift);
-                if (dz == Radius) DrawGroundEdge(terrains, edge, x0, z0 + size, x0 + size, z0 + size, steps, Lift);
-                if (dx == Radius) DrawGroundEdge(terrains, edge, x0 + size, z0, x0 + size, z0 + size, steps, Lift);
+
+                // The outer ring closes the block.
+                if (dz == Radius)
+                {
+                    Handles.color = StateColor(Mathf.Max(self, TileState(new TileCoord(tile.X, tile.Z + 1), existing, open)));
+                    DrawGroundEdge(terrains, edge, x0, z0 + size, x0 + size, z0 + size, steps, Lift);
+                }
+                if (dx == Radius)
+                {
+                    Handles.color = StateColor(Mathf.Max(self, TileState(new TileCoord(tile.X + 1, tile.Z), existing, open)));
+                    DrawGroundEdge(terrains, edge, x0 + size, z0, x0 + size, z0 + size, steps, Lift);
+                }
 
                 if (has || (dx == 0 && dz == 0))
                 {
@@ -284,6 +296,15 @@ namespace ArcheCore.Editor.DevTools.Tabs
                 }
             }
         }
+
+        /// <summary>0 = no scene, 1 = scene exists but closed, 2 = open.</summary>
+        private static int TileState(TileCoord tile, HashSet<TileCoord> existing, HashSet<TileCoord> open) =>
+            open.Contains(tile) ? 2 : existing.Contains(tile) ? 1 : 0;
+
+        private static Color StateColor(int state) =>
+            state == 2 ? new Color(0.3f, 0.75f, 1f, 0.95f)
+          : state == 1 ? new Color(0.3f, 0.75f, 1f, 0.35f)
+                       : new Color(0.7f, 0.7f, 0.7f, 0.2f);
 
         private static void DrawGroundEdge(Terrain[] terrains, Vector3[] points,
             float ax, float az, float bx, float bz, int steps, float lift)

@@ -16,4 +16,4 @@ MonoBehaviour:
   encryptedDbDir: C:/Users/aidan/Downloads/ArcheCore_ItemIcons_Tooltips/client/StreamingAssets/GameData
   decryptedDbOutputDir: F:/Development/ProjectArcheCore/ArcheCore.Client/Assets/ArcheCore.Client/db/decrypted_db_output
   serverPatchDir: 
-  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/Data/worldserver.db
+  worldServerDbPath: F:/Development/ProjectArcheCore/ArcheCore/src/ArcheCore.Server.World/bin/Debug/net10.0/Data/worldserver.db

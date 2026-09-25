@@ -102,7 +102,7 @@ namespace ArcheCore.Client.UI
             if (entry.Gold > 0) contents.Add($"<color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Gold)}>{entry.Gold}g</color>");
             if (entry.ItemTemplateId != 0) contents.Add($"{entry.ItemQuantity}x {entry.ItemName}");
 
-            text.text = $"<b>{entry.Subject}</b>  <size=90%><color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Muted)}>from {entry.Sender}</color></size>\n" +
+            text.text = $"<b>{RichText.Safe(entry.Subject)}</b>  <size=90%><color=#{ColorUtility.ToHtmlStringRGB(RuntimeUI.Muted)}>from {RichText.Safe(entry.Sender)}</color></size>\n" +
                         string.Join(", ", contents);
 
             long id = entry.Id;

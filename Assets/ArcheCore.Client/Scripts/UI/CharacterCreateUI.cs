@@ -1,6 +1,7 @@
 ﻿using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2W;
 using ArcheCore.Client.UI.Interfaces;
+using ArcheCore.Network.Shared;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +19,13 @@ namespace ArcheCore.Client.UI
         private void Awake()
         {
             createButton.onClick.AddListener(OnCreateClicked);
+            nameInput.characterLimit = CharacterNameRules.MaxLength;
+            CharacterFlowEvents.OnCreateCharacterFailed += ShowError;
+        }
+
+        private void OnDestroy()
+        {
+            CharacterFlowEvents.OnCreateCharacterFailed -= ShowError;
         }
 
         public void Show()
@@ -36,9 +44,10 @@ namespace ArcheCore.Client.UI
         {
             string name = nameInput.text.Trim();
 
-            if (string.IsNullOrEmpty(name) || name.Length < 2 || name.Length > 20)
+            // Same rules the server enforces - this just answers sooner.
+            if (!CharacterNameRules.IsValid(name, out var reason))
             {
-                ShowError("Name must be 2-20 characters.");
+                ShowError(reason);
                 return;
             }
 

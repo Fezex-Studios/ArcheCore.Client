@@ -55,7 +55,7 @@ namespace ArcheCore.Client.UI
             if (_layer == null && !Build())
                 return;
 
-            _killer.text = string.IsNullOrEmpty(killerName) ? "" : $"Killed by {killerName}";
+            _killer.text = string.IsNullOrEmpty(killerName) ? "" : $"Killed by {RichText.Safe(killerName)}";
             _layer.gameObject.SetActive(true);
         }
 
