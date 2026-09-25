@@ -5,6 +5,7 @@ using LiteNetLib;
 using MessagePack;
 
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -27,7 +28,7 @@ namespace ArcheCore.Client.Networking.W2C
             PlayerRegistry.Instance
                 ?.UpdatePosition(
                     packet.NetworkId,
-                    new Vector3(
+                    WorldOrigin.ToLocal(
                         packet.x,
                         packet.y,
                         packet.z));

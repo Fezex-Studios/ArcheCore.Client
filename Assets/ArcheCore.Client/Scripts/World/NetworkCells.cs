@@ -31,9 +31,12 @@ namespace ArcheCore.Client.World
     /// </summary>
     public class NetworkCells : MonoBehaviour
     {
-        [Header("Must match InterestManager on the server")]
+        [Header("Fallback only - the server's real values are used once connected")]
         [SerializeField] private float spawnRadius = 75f;
         [SerializeField] private float despawnRadius = 85f;
+
+        [Header("World partition")]
+        [SerializeField] private bool showWorldTiles = true;
 
         [Header("Broad phase (debug only - not view distance)")]
         [SerializeField] private bool showCellGrid = true;
@@ -50,11 +53,19 @@ namespace ArcheCore.Client.World
             // as wire spheres because interest is decided in 2D - the
             // server's grid indexes X and Z and ignores Y entirely, so a
             // sphere would imply a vertical limit that doesn't exist.
+            // The server sends its real radii on entering the world
+            // (WorldSettings), so once connected these can no longer drift.
+            float spawn = WorldSettings.ReceivedFromServer ? WorldSettings.InterestSpawnRadius : spawnRadius;
+            float despawn = WorldSettings.ReceivedFromServer ? WorldSettings.InterestDespawnRadius : despawnRadius;
+
             Gizmos.color = new Color(0f, 1f, 0.4f, 0.9f);
-            DrawGroundCircle(pos, spawnRadius);
+            DrawGroundCircle(pos, spawn);
 
             Gizmos.color = new Color(1f, 0.7f, 0f, 0.5f);
-            DrawGroundCircle(pos, despawnRadius);
+            DrawGroundCircle(pos, despawn);
+
+            if (showWorldTiles)
+                DrawWorldTiles(pos);
 
             if (!showCellGrid)
                 return;
@@ -79,6 +90,35 @@ namespace ArcheCore.Client.World
                 Gizmos.DrawLine(
                     new Vector3(originX - gridExtent, pos.y, z),
                     new Vector3(originX + gridExtent, pos.y, z));
+            }
+        }
+
+        /// <summary>
+        /// The 3x3 block of world tiles around this object - the tile scenes
+        /// WorldStreamer keeps loaded. Tile edges are world-space, so the
+        /// lines are converted through WorldOrigin and stay put when the
+        /// floating origin shifts.
+        /// </summary>
+        private static void DrawWorldTiles(Vector3 localPos)
+        {
+            Vector3 world = WorldOrigin.ToWorld(localPos);
+            var centre = ArcheCore.Movement.World.WorldGrid.TileOf(world.x, world.z);
+            float size = ArcheCore.Movement.World.WorldGrid.TileSize;
+
+            for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                var tile = new ArcheCore.Movement.World.TileCoord(centre.X + dx, centre.Z + dz);
+                Vector3 min = WorldOrigin.ToLocal(
+                    ArcheCore.Movement.World.WorldGrid.MinX(tile), localPos.y,
+                    ArcheCore.Movement.World.WorldGrid.MinZ(tile));
+
+                bool loaded = WorldStreamer.Instance != null && WorldStreamer.Instance.IsTileLoaded(tile);
+                Gizmos.color = dx == 0 && dz == 0
+                    ? new Color(0.3f, 0.7f, 1f, 0.9f)
+                    : loaded ? new Color(0.3f, 0.7f, 1f, 0.45f) : new Color(0.6f, 0.6f, 0.6f, 0.25f);
+
+                Gizmos.DrawWireCube(min + new Vector3(size * 0.5f, 0f, size * 0.5f), new Vector3(size, 0.1f, size));
             }
         }
 

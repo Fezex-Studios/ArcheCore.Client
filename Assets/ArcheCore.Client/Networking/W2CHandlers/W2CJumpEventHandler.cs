@@ -4,6 +4,7 @@ using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -30,13 +31,14 @@ namespace ArcheCore.Client.Networking.W2C
                     .Deserialize<W2CJumpEventPacket>(
                         reader.GetRemainingBytes());
 
-            var origin = new Vector3(packet.OriginX, packet.OriginY, packet.OriginZ);
             var horizontal = new Vector3(packet.VelocityX, 0f, packet.VelocityZ);
             float vertical = packet.VelocityY;
             int networkId = packet.NetworkId;
 
             WorldLoader.RunWhenReady(() =>
             {
+                // Converted inside the queued action - see WorldOrigin.
+                var origin = WorldOrigin.ToLocal(packet.OriginX, packet.OriginY, packet.OriginZ);
                 var players = PlayerRegistry.Instance;
 
                 if (players != null && players.BeginJump(networkId, origin, horizontal, vertical))

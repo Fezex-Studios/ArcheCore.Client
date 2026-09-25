@@ -36,6 +36,17 @@ namespace ArcheCore.Client.UI
         }
 
         private readonly List<Number> _numbers = new();
+
+        // Floating origin: numbers are anchored to a world point, not a
+        // transform, so a shift has to move them explicitly.
+        private void OnEnable()  => ArcheCore.Client.World.WorldOrigin.Shifted += OnWorldShifted;
+        private void OnDisable() => ArcheCore.Client.World.WorldOrigin.Shifted -= OnWorldShifted;
+
+        private void OnWorldShifted(Vector3 localDelta)
+        {
+            foreach (var n in _numbers)
+                n.World += localDelta;
+        }
         private RectTransform _self;
         private Canvas _root;
 

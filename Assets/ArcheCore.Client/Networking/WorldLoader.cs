@@ -9,7 +9,9 @@ using UnityEngine.SceneManagement;
 namespace ArcheCore.Client.Networking
 {
     /// <summary>
-    /// The ONE place that loads main_world, plus an ordered queue of
+    /// The ONE place that loads main_world - the PERSISTENT world scene
+    /// (camera, lighting, registries, UI) that tile scenes stream in around
+    /// (see WorldStreamer) - plus an ordered queue of
     /// "world" packet work that must wait until the scene is ready.
     ///
     /// Why this exists: the server sends SpawnPlayer (self), then SpawnPlayer
@@ -82,6 +84,10 @@ namespace ArcheCore.Client.Networking
         {
             Pending.Clear();
 
+            // The world scene - and every tile streamed into it - is about to
+            // go. Nothing shifted survives, so the offset goes too.
+            WorldOrigin.Reset();
+
             if (_loading)
             {
                 _returnScene = sceneName;
@@ -147,6 +153,8 @@ namespace ArcheCore.Client.Networking
             if (WorldObjectPrefabRegistry.Instance == null)
                 Debug.LogError("[WorldLoader] WorldObjectPrefabRegistry not found in main_world - NPCs cannot spawn.");
 
+            EnsureWorldStreaming();
+
             _loading = false;
 
             Debug.Log($"[WorldLoader] World ready - applying {Pending.Count} queued action(s).");
@@ -154,6 +162,29 @@ namespace ArcheCore.Client.Networking
             // Anything queued while we drain goes to the back and is drained here too.
             while (Pending.Count > 0)
                 Run(Pending.Dequeue());
+        }
+
+        /// <summary>
+        /// World streaming and the floating origin live in the persistent
+        /// world scene. If main_world already has them (placed by hand to
+        /// tune their settings) those are used; otherwise they're created
+        /// here with defaults, so an existing main_world needs no edits.
+        /// Created before the queued spawns run, so the local player's
+        /// motor finds the streamer and waits for ground on its first frame.
+        /// </summary>
+        private static void EnsureWorldStreaming()
+        {
+            if (WorldStreamer.Instance != null && FloatingOrigin.Instance != null)
+                return;
+
+            GameObject host = WorldStreamer.Instance != null
+                ? WorldStreamer.Instance.gameObject
+                : FloatingOrigin.Instance != null
+                    ? FloatingOrigin.Instance.gameObject
+                    : new GameObject("[World Streaming]");
+
+            if (WorldStreamer.Instance == null) host.AddComponent<WorldStreamer>();
+            if (FloatingOrigin.Instance == null) host.AddComponent<FloatingOrigin>();
         }
 
         /// <summary>A disconnect arrived during the load - go there instead of flushing.</summary>

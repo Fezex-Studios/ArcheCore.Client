@@ -7,6 +7,7 @@ using ArcheCore.Movement;
 using ArcheCore.Network.Shared;
 using UnityEngine;
 using SVector3 = System.Numerics.Vector3;
+using ArcheCore.Client.World;
 
 namespace ArchCore.Client
 {
@@ -257,9 +258,11 @@ namespace ArchCore.Client
             if (network == null || network.ServerPeer == null)
                 return;
 
+            // Unity space -> world (server) space. The ONE outbound position
+            // on the wire; see WorldOrigin.
             C2WPlayerMovePacketSender.Send(
                 network.ServerPeer,
-                position,
+                WorldOrigin.ToWorld(position),
                 velocity,
                 new Vector3(
                     state.Pitch * Mathf.Rad2Deg,

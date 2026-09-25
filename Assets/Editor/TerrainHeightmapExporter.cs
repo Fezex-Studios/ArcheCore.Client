@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using ArcheCore.Movement.World;
 using ArcheCore.Movement.Terrain;
 using UnityEditor;
 using UnityEngine;
@@ -58,10 +60,46 @@ namespace ArcheCore.Client.Editor
             EditorUtility.DisplayDialog(
                 "Export Heightmap",
                 $"Exported '{terrain.name}' to:\n{path}\n\n" +
-                "Copy this file to the world server's terrain data folder " +
-                "and point WorldServerConfig at it for the zone this " +
-                "terrain belongs to.",
+                "Copy this file into the world server's TerrainDirectory " +
+                "(Data/terrain_data by default). Every .achtmap in that folder " +
+                "is stitched into one seamless ground for the shard. For a " +
+                "partitioned world use Dev Tools > World Tiles > Export All Terrain.",
                 "OK");
+        }
+
+        /// <summary>
+        /// Stable file name for a terrain: which tile its corner is in, plus
+        /// its own name - so re-exporting overwrites the same file instead of
+        /// leaving a stale twin behind, and a folder listing reads as a map.
+        /// </summary>
+        public static string FileNameFor(Terrain terrain)
+        {
+            Vector3 p = terrain.transform.position;
+            TileCoord tile = WorldGrid.TileOf(p.x, p.z);
+
+            string safeName = terrain.name;
+            foreach (char c in Path.GetInvalidFileNameChars())
+                safeName = safeName.Replace(c, '_');
+
+            return $"{tile.SceneName}__{safeName}.achtmap";
+        }
+
+        /// <summary>Exports every terrain given into one folder. Returns the paths written.</summary>
+        public static List<string> ExportAll(IEnumerable<Terrain> terrains, string outputDirectory)
+        {
+            Directory.CreateDirectory(outputDirectory);
+            var written = new List<string>();
+
+            foreach (var terrain in terrains)
+            {
+                if (terrain == null || terrain.terrainData == null) continue;
+
+                string path = Path.Combine(outputDirectory, FileNameFor(terrain));
+                Export(terrain, path);
+                written.Add(path);
+            }
+
+            return written;
         }
 
         public static void Export(Terrain terrain, string outputPath)

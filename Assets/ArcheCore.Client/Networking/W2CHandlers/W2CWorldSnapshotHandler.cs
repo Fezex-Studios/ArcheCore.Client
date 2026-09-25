@@ -4,6 +4,7 @@ using ArcheCore.Client.Gameplay;
 using ArcheCore.Network.Client;
 using LiteNetLib;
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -63,6 +64,11 @@ namespace ArcheCore.Client.Networking.W2C
             float pitchDegrees = entry.Pitch * Mathf.Rad2Deg;
             float rollDegrees  = entry.Roll  * Mathf.Rad2Deg;
 
+            // Snapshots are applied the moment they arrive, so converting
+            // here is converting at the last moment. Velocity is a direction
+            // and needs no conversion.
+            Vector3 position = WorldOrigin.ToLocal(entry.Position);
+
             if (entry.IsNpc)
             {
                 var npcs = NpcRegistry.Instance;
@@ -75,7 +81,7 @@ namespace ArcheCore.Client.Networking.W2C
 
                 LastTick[entry.NetworkId] = tick;
                 npcs.ApplyNetworkState(
-                    entry.NetworkId, entry.Position, entry.Velocity,
+                    entry.NetworkId, position, entry.Velocity,
                     yawDegrees, pitchDegrees, rollDegrees, entry.State, tick);
             }
             else
@@ -89,7 +95,7 @@ namespace ArcheCore.Client.Networking.W2C
 
                 LastTick[entry.NetworkId] = tick;
                 players.ApplyNetworkState(
-                    entry.NetworkId, entry.Position, entry.Velocity,
+                    entry.NetworkId, position, entry.Velocity,
                     yawDegrees, pitchDegrees, rollDegrees, entry.State, tick);
             }
         }

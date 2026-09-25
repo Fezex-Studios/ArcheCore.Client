@@ -1,3 +1,4 @@
+using ArcheCore.Client.World;
 using ArcheCore.Movement;
 using UnityEngine;
 using SVector3 = System.Numerics.Vector3;
@@ -116,6 +117,14 @@ namespace ArcheCore.Client.Movement
         private float _accumulator;
         private uint _sequence;
 
+        /// <summary>
+        /// True while the simulation is held because the terrain under the
+        /// character hasn't streamed in yet (see WorldStreamer.IsAreaReady).
+        /// The character stays exactly where it was placed - no gravity, no
+        /// input - until the ground exists to stand on.
+        /// </summary>
+        public bool IsWaitingForWorld { get; private set; }
+
         /// <summary>Latest simulated state. The network layer reads this
         /// rather than transform.position, because the transform is an
         /// interpolated render pose and may sit between two ticks.</summary>
@@ -225,9 +234,67 @@ namespace ArcheCore.Client.Movement
             _previousState = _state;
         }
 
+        private void OnEnable()
+        {
+            WorldOrigin.Shifted += OnWorldShifted;
+        }
+
+        private void OnDisable()
+        {
+            WorldOrigin.Shifted -= OnWorldShifted;
+        }
+
+        /// <summary>
+        /// The floating origin moved the world. The transform was moved with
+        /// it, but the simulation state is a plain struct the shift can't
+        /// see - without this the very next Render would put the character
+        /// back where it was, which is now the shift distance away.
+        /// </summary>
+        private void OnWorldShifted(Vector3 localDelta)
+        {
+            var d = UnityCollisionWorld.ToNumerics(localDelta);
+            _state.Position += d;
+            _previousState.Position += d;
+        }
+
         private void Update()
         {
             float dt = FixedDelta;
+
+            // THE GROUND GATE. Spawning, respawning or being corrected onto a
+            // tile whose scene is still loading would otherwise start gravity
+            // with nothing underneath - the character falls through a world
+            // that exists a moment later. Hold still until it's there.
+            var streamer = WorldStreamer.Instance;
+            if (streamer != null)
+            {
+                var feet = _state.FeetPosition(_profile);
+                bool ready = streamer.IsAreaReady(
+                    WorldOrigin.ToWorld(new Vector3(feet.X, feet.Y, feet.Z)));
+
+                if (!ready)
+                {
+                    if (!IsWaitingForWorld)
+                        Debug.Log("[LocalCharacterMotor] Waiting for the world to stream in under the player...");
+
+                    IsWaitingForWorld = true;
+                    _accumulator = 0f;
+                    _previousState = _state;
+                    Render(1f);
+                    return;
+                }
+
+                if (IsWaitingForWorld)
+                {
+                    // Ground just arrived. Start from rest, and drop the
+                    // input backlog so held keys don't fire a burst of
+                    // steps all at once.
+                    IsWaitingForWorld = false;
+                    _state.Velocity = System.Numerics.Vector3.Zero;
+                    _previousState = _state;
+                }
+            }
+
             _accumulator += Time.deltaTime;
 
             int steps = 0;

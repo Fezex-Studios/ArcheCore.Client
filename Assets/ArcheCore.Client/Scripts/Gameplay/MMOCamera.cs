@@ -184,6 +184,12 @@ namespace ArcheCore.Client.Gameplay
         private Vector2 _cursorRestorePoint;
         private Vector3 _lastTargetPosition;
 
+        // Floating origin: the target moves by the shift in one frame, which
+        // would otherwise read as enormous "motion" to AutoAlign.
+        private void OnEnable()  => ArcheCore.Client.World.WorldOrigin.Shifted += OnWorldShifted;
+        private void OnDisable() => ArcheCore.Client.World.WorldOrigin.Shifted -= OnWorldShifted;
+        private void OnWorldShifted(Vector3 localDelta) => _lastTargetPosition += localDelta;
+
         /// <summary>
         /// Scratch for the occlusion sweep. Sized generously - a cast into a
         /// crowded corner can legitimately touch a lot of geometry, and hits

@@ -8,6 +8,7 @@ using ArcheCore.Network.Shared.Packets.W2C;
 using LiteNetLib;
 using MessagePack;
 using UnityEngine;
+using ArcheCore.Client.World;
 
 namespace ArcheCore.Client.Networking.W2C
 {
@@ -49,7 +50,7 @@ namespace ArcheCore.Client.Networking.W2C
 
                 LocalCharacterState.ApplyHealth(packet.Health, packet.MaxHealth);
 
-                var position = new Vector3(packet.X, packet.Y, packet.Z);
+                var position = WorldOrigin.ToLocal(packet.X, packet.Y, packet.Z);
                 int localId = CombatClient.LocalPlayerId;
 
                 if (localId != 0 && PlayerRegistry.Instance != null &&
