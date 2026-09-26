@@ -26,5 +26,19 @@ namespace ArcheCore.Client.UI.Events
         public static event Action<int, int> OnHealthChanged;
         public static void RaiseHealthChanged(int health, int maxHealth) => OnHealthChanged?.Invoke(health, maxHealth);
 
+        // ── Phase 3 ──
+
+        /// <summary>(mana, maxMana) - your own.</summary>
+        public static event Action<int, int> OnManaChanged;
+        public static void RaiseManaChanged(int mana, int maxMana) => OnManaChanged?.Invoke(mana, maxMana);
+
+        /// <summary>Your stat sheet changed (W2CStats). Read LocalCharacterState.Stat().</summary>
+        public static event Action OnStatsChanged;
+        public static void RaiseStatsChanged() => OnStatsChanged?.Invoke();
+
+        /// <summary>What you're wearing changed (W2CEquipment).</summary>
+        public static event Action OnEquipmentChanged;
+        public static void RaiseEquipmentChanged() => OnEquipmentChanged?.Invoke();
+
     }
 }

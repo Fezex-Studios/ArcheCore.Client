@@ -18,13 +18,14 @@ namespace ArcheCore.Client.Networking.W2C
         }
     }
 
-    /// <summary>Opcode 54. Your own health changed (potion, level-up).</summary>
+    /// <summary>Opcode 54. Your own health and mana changed (potion, level-up, regen, a skill's cost).</summary>
     public class W2CHealthUpdateHandler : IClientPacketHandler
     {
         public void Handle(NetPacketReader reader)
         {
             var packet = MessagePackSerializer.Deserialize<W2CHealthUpdatePacket>(reader.GetRemainingBytes());
             LocalCharacterState.ApplyHealth(packet.Health, packet.MaxHealth);
+            LocalCharacterState.ApplyMana(packet.Mana, packet.MaxMana);
         }
     }
 

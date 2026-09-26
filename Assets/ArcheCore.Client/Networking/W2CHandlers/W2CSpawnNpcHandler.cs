@@ -52,6 +52,9 @@ namespace ArcheCore.Client.Networking.W2C
             // same id, so a duplicate spawn packet can't create two orcs.)
             NpcRegistry.Instance?.Register(identity);
 
+            // Buffs and debuffs it already had when it came into view.
+            ArcheCore.Client.Gameplay.Statuses.StatusState.SetAll(packet.NetworkId, packet.Statuses);
+
             // Makes this NPC a valid target for PlayerInteraction's raycast.
             // NOTE: the prefab's collider also needs to be on the layer
             // PlayerInteraction raycasts against - set that on the prefab.

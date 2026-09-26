@@ -7,6 +7,10 @@ namespace ArcheCore.Client.UI
     /// <summary>
     /// Floating damage numbers above whatever got hit: they rise and fade
     /// over about a second. Your own hits are gold, anyone else's are white.
+    ///
+    /// Roadmap 3.4: a crit is bigger with a "!", a glancing blow smaller, a
+    /// miss says "Miss", a damage-over-time tick is smaller and italic, and
+    /// heals float up green with a "+".
     /// Builds itself under the root Canvas on the first hit, and reuses its
     /// labels rather than creating one per hit.
     /// </summary>
@@ -24,6 +28,9 @@ namespace ArcheCore.Client.UI
         [Tooltip("Damage done to YOU - the one number that must never be missed.")]
         [SerializeField] private Color takenColor = new Color(0.90f, 0.25f, 0.20f, 1f);
         [SerializeField] private float takenScale = 1.3f;
+        [SerializeField] private Color healColor = new Color(0.45f, 0.90f, 0.40f, 1f);
+        [SerializeField] private Color missColor = new Color(0.70f, 0.70f, 0.70f, 1f);
+        [SerializeField] private float critScale = 1.45f;
 
         private sealed class Number
         {
@@ -50,12 +57,35 @@ namespace ArcheCore.Client.UI
         private RectTransform _self;
         private Canvas _root;
 
-        public static void Spawn(Vector3 worldPosition, int damage, bool mine, bool takenByMe = false)
+        public static void Spawn(Vector3 worldPosition, int damage, bool mine, bool takenByMe = false,
+                                 ArcheCore.Network.Shared.Combat.HitOutcome outcome = ArcheCore.Network.Shared.Combat.HitOutcome.Hit,
+                                 bool periodic = false)
         {
             if (_instance == null && !Create())
                 return;
 
-            _instance.Add(worldPosition, damage, mine, takenByMe);
+            var o = outcome;
+            string text = o == ArcheCore.Network.Shared.Combat.HitOutcome.Miss ? "Miss"
+                        : o == ArcheCore.Network.Shared.Combat.HitOutcome.Crit ? damage + "!"
+                        : damage.ToString();
+
+            float scale = o == ArcheCore.Network.Shared.Combat.HitOutcome.Crit ? _instance.critScale
+                        : o == ArcheCore.Network.Shared.Combat.HitOutcome.Glance || periodic ? 0.8f
+                        : 1f;
+
+            Color color = o == ArcheCore.Network.Shared.Combat.HitOutcome.Miss ? _instance.missColor
+                        : takenByMe ? _instance.takenColor : mine ? _instance.mineColor : _instance.otherColor;
+
+            _instance.Add(worldPosition, text, color, scale * (takenByMe ? _instance.takenScale : 1f), italic: periodic);
+        }
+
+        /// <summary>A heal (a Mend, a heal-over-time tick): green, with a +.</summary>
+        public static void SpawnHeal(Vector3 worldPosition, int amount, bool crit)
+        {
+            if (amount <= 0 || (_instance == null && !Create()))
+                return;
+
+            _instance.Add(worldPosition, crit ? $"+{amount}!" : $"+{amount}", _instance.healColor, crit ? _instance.critScale : 1f, italic: false);
         }
 
         private static bool Create()
@@ -96,7 +126,7 @@ namespace ArcheCore.Client.UI
             if (_instance == this) _instance = null;
         }
 
-        private void Add(Vector3 world, int damage, bool mine, bool takenByMe)
+        private void Add(Vector3 world, string text, Color color, float scale, bool italic)
         {
             Number n = null;
             foreach (var x in _numbers) if (!x.Live) { n = x; break; }
@@ -116,10 +146,11 @@ namespace ArcheCore.Client.UI
 
             n.World = world + Vector3.up * startHeight + new Vector3(Random.Range(-0.3f, 0.3f), 0, Random.Range(-0.3f, 0.3f));
             n.Age = 0f;
-            n.Color = takenByMe ? takenColor : mine ? mineColor : otherColor;
+            n.Color = color;
             n.Live = true;
-            n.Label.text = damage.ToString();
-            n.Label.fontSize = takenByMe ? fontSize * takenScale : fontSize;
+            n.Label.text = text;
+            n.Label.fontSize = fontSize * scale;
+            n.Label.fontStyle = italic ? FontStyles.Bold | FontStyles.Italic : FontStyles.Bold;
             n.Label.gameObject.SetActive(true);
             Place(n);
         }

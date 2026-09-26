@@ -4,6 +4,7 @@ using ArcheCore.Client.Networking;
 using ArcheCore.Client.Networking.C2WSenders;
 using ArcheCore.Client.UI;
 using ArcheCore.Client.UI.State;
+using ArcheCore.Client.Gameplay.Combat;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -14,8 +15,10 @@ namespace ArcheCore.Client.Gameplay.Combat
     /// Combat input. Creates itself - no scene setup.
     ///
     ///   Left-click an enemy  - target it (the same click that interacts)
-    ///   Attack key (1)       - attack the enemy under the cursor, or your
-    ///                          current target if you're not hovering one
+    ///   Skill keys (1-5)     - use that skill-bar skill: an enemy skill on
+    ///                          the enemy under the cursor, or your current
+    ///                          target; a self skill (Mend, Battle Shout) on you
+    ///   C                    - the character window
     ///
     /// Ignored while typing in chat, while on cooldown (the server would drop
     /// it anyway), and before entering the world. Also creates the target
@@ -23,7 +26,12 @@ namespace ArcheCore.Client.Gameplay.Combat
     /// </summary>
     public class CombatController : MonoBehaviour
     {
-        // The attack key is GameHotkeys.Attack (rebindable, default 1).
+        // Skill keys are GameHotkeys.SkillSlot(1..5) (rebindable, default 1-5).
+
+        public static CombatController Instance { get; private set; }
+
+        private void Awake() => Instance = this;
+        private void OnDestroy() { if (Instance == this) Instance = null; }
 
         private PlayerInteraction _interaction;
         private float _nextSearch;
@@ -63,13 +71,63 @@ namespace ArcheCore.Client.Gameplay.Combat
             if (CombatClient.TargetId != 0)
                 TargetFrameUI.EnsureInstance();
 
-            if (!GameHotkeys.Pressed(GameHotkeys.Attack) || WorldUIManager.IsTypingInField)
+            // Phase 3 HUD: the skill bar (with mana) and your buffs.
+            SkillBarUI.EnsureInstance();
+            PlayerStatusRowUI.EnsureInstance();
+
+            if (WorldUIManager.IsTypingInField)
                 return;
 
-            TryAttack();
+            for (int slot = 1; slot <= GameHotkeys.SkillSlotCount; slot++)
+            {
+                if (GameHotkeys.Pressed(GameHotkeys.SkillSlot(slot)))
+                {
+                    UseSkillSlot(slot);
+                    break;
+                }
+            }
+
+            if (GameHotkeys.Pressed(GameHotkeys.ToggleCharacterWindow))
+                CharacterWindowUI.Toggle();
         }
 
-        private void TryAttack()
+        /// <summary>Key 1-5 or a click on the skill bar.</summary>
+        public void UseSkillSlot(int slot)
+        {
+            var skill = SkillBook.BySlot(slot);
+
+            // Before the catalogue arrives (or from an older server), key 1
+            // is still Strike.
+            int skillId = skill?.Id ?? (slot == 1 ? CombatClient.DefaultSkillId : 0);
+            if (skillId == 0)
+                return;
+
+            if (skill != null && skill.TargetRule == 1)
+            {
+                UseOnSelf(skill);
+                return;
+            }
+
+            TryAttack(skillId, skill);
+        }
+
+        private void UseOnSelf(ArcheCore.Network.Shared.Packets.W2C.SkillData skill)
+        {
+            if (SkillBook.IsOnCooldown(skill.Id))
+                return;
+
+            if (skill.ManaCost > LocalCharacterState.Mana && LocalCharacterState.MaxMana > 0)
+            {
+                HudMessageDisplay.QueueOrShow("Not enough mana.");
+                return;
+            }
+
+            var peer = ClientNetwork.Instance?.ServerPeer;
+            if (peer != null)
+                C2WAttackPacketSender.Send(peer, 0, skill.Id);
+        }
+
+        private void TryAttack(int skillId, ArcheCore.Network.Shared.Packets.W2C.SkillData skill)
         {
             int target = HoveredAttackableNpc();
             if (target == 0 && IsOtherPlayer(HoveredTarget()))
@@ -94,14 +152,20 @@ namespace ArcheCore.Client.Gameplay.Combat
                 return;
             }
 
-            if (CombatClient.IsOnCooldown)
+            if (SkillBook.IsOnCooldown(skillId) || (skillId == CombatClient.DefaultSkillId && CombatClient.IsOnCooldown))
                 return;
+
+            if (skill != null && skill.ManaCost > LocalCharacterState.Mana && LocalCharacterState.MaxMana > 0)
+            {
+                HudMessageDisplay.QueueOrShow("Not enough mana.");
+                return;
+            }
 
             var peer = ClientNetwork.Instance?.ServerPeer;
             if (peer == null)
                 return;
 
-            C2WAttackPacketSender.Send(peer, target, CombatClient.DefaultSkillId);
+            C2WAttackPacketSender.Send(peer, target, skillId);
         }
 
         private void FindInteraction()

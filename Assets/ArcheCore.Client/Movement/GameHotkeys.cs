@@ -18,18 +18,28 @@ namespace ArcheCore.Client.Movement
     /// player's input component. A keybind options screen lists
     /// PlayerInputActions.All and GameHotkeys.All together.
     ///
-    /// The Phase 4 hotbar adds its slots here (Hotbar 1..0).
+    /// Skill keys 1-5 (Phase 3's skill bar) and the character window (C)
+    /// live here too; the Phase 4 hotbar extends the skill slots.
     /// </summary>
     public static class GameHotkeys
     {
         private const string PrefsKey = "ArcheCore.HotkeyBindings";
 
         private static InputActionMap _map;
-        private static InputAction _attack, _interact1, _interact2, _questTracker;
+        private static InputAction _attack, _interact1, _interact2, _questTracker, _characterWindow;
+        private static InputAction[] _skills;
         private static InputAction[] _all;
 
-        /// <summary>Use the current skill on the target. Default 1.</summary>
+        /// <summary>Skill bar key 1 (the first skill, Strike). Default 1.</summary>
         public static InputAction Attack             { get { Ensure(); return _attack; } }
+
+        /// <summary>Skill bar keys 1..SkillSlotCount (roadmap 3.x). Slot 1 is Attack.</summary>
+        public static InputAction SkillSlot(int slot) { Ensure(); return slot >= 1 && slot <= _skills.Length ? _skills[slot - 1] : null; }
+
+        public const int SkillSlotCount = 5;
+
+        /// <summary>Open/close the character window (stats and equipment). Default C.</summary>
+        public static InputAction ToggleCharacterWindow { get { Ensure(); return _characterWindow; } }
 
         /// <summary>First action on the focused interactable (Gather, Talk...). Default F.</summary>
         public static InputAction InteractPrimary    { get { Ensure(); return _interact1; } }
@@ -60,12 +70,18 @@ namespace ArcheCore.Client.Movement
 
             _map = new InputActionMap("Hotkeys");
 
-            _attack       = Add("Attack",             "<Keyboard>/1", null);
+            _attack       = Add("Skill 1",            "<Keyboard>/1", null);
+            var skill2    = Add("Skill 2",            "<Keyboard>/2", null);
+            var skill3    = Add("Skill 3",            "<Keyboard>/3", null);
+            var skill4    = Add("Skill 4",            "<Keyboard>/4", null);
+            var skill5    = Add("Skill 5",            "<Keyboard>/5", null);
             _interact1    = Add("Interact",           "<Keyboard>/f", null);
             _interact2    = Add("Interact (second)",  "<Keyboard>/g", null);
             _questTracker = Add("Toggle Quest Tracker","<Keyboard>/l", null);
+            _characterWindow = Add("Character",       "<Keyboard>/c", null);
 
-            _all = new[] { _attack, _interact1, _interact2, _questTracker };
+            _skills = new[] { _attack, skill2, skill3, skill4, skill5 };
+            _all = new[] { _attack, skill2, skill3, skill4, skill5, _interact1, _interact2, _questTracker, _characterWindow };
 
             LoadOverrides();
             _map.Enable();

@@ -7,8 +7,8 @@ using UnityEngine.UI;
 namespace ArcheCore.Client.UI
 {
     /// <summary>
-    /// Top-centre frame for your current target: name, level, and a health
-    /// bar that follows every W2CCombatEvent. Builds itself under the root
+    /// Top-centre frame for your current target: name, level, a health bar
+    /// that follows every W2CCombatEvent, and its buffs and debuffs below. Builds itself under the root
     /// Canvas the first time you have a target - no scene setup. To restyle,
     /// add this component to an object under the Canvas and edit the fields.
     ///
@@ -111,6 +111,17 @@ namespace ArcheCore.Client.UI
 
             _hp = Text("HealthText", back, 10f, FontStyles.Bold, TextAlignmentOptions.Center);
             var hr = _hp.rectTransform; hr.anchorMin = Vector2.zero; hr.anchorMax = Vector2.one; hr.offsetMin = hr.offsetMax = Vector2.zero;
+
+            // Roadmap 3.3: the target's buffs and debuffs, under the frame.
+            var row = Rect("Statuses", self, stretch: false);
+            row.anchorMin = new Vector2(0f, 0f); row.anchorMax = new Vector2(1f, 0f);
+            row.pivot = new Vector2(0f, 1f);
+            row.anchoredPosition = new Vector2(0f, -4f);
+            row.sizeDelta = new Vector2(0f, 42f);
+            var statuses = row.gameObject.AddComponent<StatusRowUI>();
+            statuses.IconSize = 24f;
+            statuses.MaxIcons = 9;
+            statuses.EntityId = () => CombatClient.TargetId;
         }
 
         private static RectTransform Rect(string name, Transform parent, bool stretch)

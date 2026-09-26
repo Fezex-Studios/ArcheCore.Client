@@ -53,6 +53,7 @@ namespace ArcheCore.Client.UI
         [SerializeField] private Color mutedColor   = new Color(0.612f, 0.561f, 0.478f, 1f);
         [SerializeField] private Color useColor     = new Color(0.55f, 0.82f, 0.45f, 1f);
         [SerializeField] private Color warningColor = new Color(0.85f, 0.35f, 0.30f, 1f);
+        [SerializeField] private Color bonusColor   = new Color(0.40f, 0.85f, 0.45f, 1f);
         [SerializeField] private Color goldColor    = new Color(0.910f, 0.753f, 0.416f, 1f);
 
         [Header("Font sizes")]
@@ -73,17 +74,19 @@ namespace ArcheCore.Client.UI
         private object _owner;
         private int _itemId, _quantity;
         private string _extra;
+        private bool _bound;
         private bool _pending, _visible;
         private float _showAt;
 
         // ── Public API ───────────────────────────────────────────────
 
         /// <summary>Show (or update) the tooltip for an item. extraLine is appended at the bottom - prices, etc.</summary>
-        public static void Show(object owner, int itemTemplateId, int quantity, string extraLine = null)
+        public static void Show(object owner, int itemTemplateId, int quantity, string extraLine = null, bool bound = false)
         {
             if (itemTemplateId <= 0 || !EnsureInstance())
                 return;
 
+            Instance._bound = bound;
             Instance.ShowInternal(owner, itemTemplateId, quantity, extraLine);
         }
 
@@ -347,7 +350,33 @@ namespace ArcheCore.Client.UI
                 bool tooLow = LocalCharacterState.HasEnteredWorld && LocalCharacterState.Level < record.RequiredLevel;
                 Line(sb, $"Required level {record.RequiredLevel}", tooLow ? warningColor : mutedColor);
             }
-            if (known && record.IsUsable)
+            // Gear (roadmap 3.2): where it goes, what it gives, how it binds.
+            bool isGear = ArcheCore.Client.GameData.GearCatalog.TryGet(_itemId, out var gear) && gear.EquipSlot > 0;
+            if (gear != null)
+            {
+                if (isGear)
+                    Line(sb, ArcheCore.Client.GameData.GearCatalog.SlotName(gear.EquipSlot), mutedColor);
+
+                if (gear.Stats != null)
+                    foreach (var bonus in gear.Stats)
+                        Line(sb, ArcheCore.Client.GameData.StatNames.Bonus((ArcheCore.Network.Shared.Combat.StatId)bonus.Stat, bonus.Amount), bonusColor);
+
+                if (_bound)
+                    Line(sb, "Soulbound", mutedColor);
+                else if (ArcheCore.Client.GameData.GearCatalog.BindText(gear.BindType) is string bindText)
+                    Line(sb, bindText, mutedColor);
+
+                if (gear.NoTrade)
+                    Line(sb, "Can't be traded", mutedColor);
+            }
+            else if (_bound)
+            {
+                Line(sb, "Soulbound", mutedColor);
+            }
+
+            if (isGear)
+                Line(sb, "Equip: Right-click", useColor);
+            else if (known && record.IsUsable)
                 Line(sb, record.ConsumeOnUse ? "Use: Right-click (consumed)" : "Use: Right-click", useColor);
             if (_quantity > 1)
                 Line(sb, $"Stack: {_quantity}", textColor);

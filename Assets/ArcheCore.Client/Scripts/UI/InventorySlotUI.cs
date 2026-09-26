@@ -184,7 +184,8 @@ namespace ArcheCore.Client.UI
             }
 
             // While a merchant is open, the tooltip also says what it sells for.
-            ItemTooltipUI.Show(this, ItemTemplateId, Quantity, ShopPanelUI.DescribeSale(ItemTemplateId, Quantity));
+            ItemTooltipUI.Show(this, ItemTemplateId, Quantity, ShopPanelUI.DescribeSale(ItemTemplateId, Quantity),
+                               bound: ArcheCore.Client.UI.State.LocalCharacterState.IsBound(Index));
         }
 
         // ── Clicks ───────────────────────────────────────────────────

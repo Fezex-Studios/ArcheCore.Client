@@ -33,7 +33,7 @@ namespace ArcheCore.Client.Networking.W2C
         public void Handle(NetPacketReader reader)
         {
             var packet = MessagePackSerializer.Deserialize<W2CInventorySlotChangedPacket>(reader.GetRemainingBytes());
-            LocalCharacterState.ApplySlotChanged(packet.Index, packet.ItemTemplateId, packet.Quantity);
+            LocalCharacterState.ApplySlotChanged(packet.Index, packet.ItemTemplateId, packet.Quantity, packet.Bound);
         }
     }
 }

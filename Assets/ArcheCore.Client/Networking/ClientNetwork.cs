@@ -224,6 +224,14 @@ namespace ArcheCore.Client.Networking
             dispatcher.Register(Opcodes.W2CAuctionList,  new W2CAuctionListHandler());
             dispatcher.Register(Opcodes.W2CCashShopList, new W2CCashShopListHandler());
             dispatcher.Register(Opcodes.W2CMarketResult, new W2CMarketResultHandler());
+
+            // Phase 3: stats, equipment, status effects, skills
+            dispatcher.Register(Opcodes.W2CStats,           new W2CStatsHandler());
+            dispatcher.Register(Opcodes.W2CEquipment,       new W2CEquipmentHandler());
+            dispatcher.Register(Opcodes.W2CItemGearCatalog, new W2CItemGearCatalogHandler());
+            dispatcher.Register(Opcodes.W2CStatusCatalog,   new W2CStatusCatalogHandler());
+            dispatcher.Register(Opcodes.W2CStatusUpdate,    new W2CStatusUpdateHandler());
+            dispatcher.Register(Opcodes.W2CSkillCatalog,    new W2CSkillCatalogHandler());
         }
 
         public void OnPeerConnected(NetPeer peer)

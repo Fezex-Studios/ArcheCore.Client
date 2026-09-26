@@ -28,6 +28,7 @@ namespace ArcheCore.Client.Networking.W2C
                 // Whatever it was, it's no longer a valid target - and if it
                 // was the corpse in the loot window, that window closes.
                 ArcheCore.Client.Gameplay.Combat.CombatClient.ClearTargetIf(networkId);
+                ArcheCore.Client.Gameplay.Statuses.StatusState.Clear(networkId);
                 ArcheCore.Client.UI.LootWindowUI.CloseIf(networkId);
 
                 if (HarvestNodeRegistry.Despawn(networkId))

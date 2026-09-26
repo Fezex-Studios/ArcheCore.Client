@@ -56,6 +56,8 @@ namespace ArcheCore.Client.Networking.W2C
                 ArcheCore.Client.Gameplay.Mounts.MountVisuals.Apply(packet.NetworkId, packet.MountModelType, 1f);
             }
 
+            ArcheCore.Client.Gameplay.Statuses.StatusState.SetAll(packet.NetworkId, packet.Statuses);
+
             if (pc != null)
             {
                 pc.playerName = packet.Name;

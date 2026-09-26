@@ -18,7 +18,7 @@ namespace ArcheCore.Client.Gameplay.Combat
     /// </summary>
     public static class CombatClient
     {
-        /// <summary>The one skill (Skills.Id 1, "Strike"). Roadmap H.</summary>
+        /// <summary>Strike (Skills.Id 1), the fallback when the skill catalogue hasn't arrived.</summary>
         public const int DefaultSkillId = 1;
 
         public static int TargetId { get; private set; }
@@ -105,14 +105,31 @@ namespace ArcheCore.Client.Gameplay.Combat
             }
 
             bool mine = p.AttackerId == localId;
-            if (mine && p.CooldownMs > 0)
+            if (mine && p.CooldownMs > 0 && p.SkillId != 0)
             {
-                _cooldownLength = p.CooldownMs / 1000.0;
-                _readyAt = Time.realtimeSinceStartupAsDouble + _cooldownLength;
+                // Per skill (roadmap 3.x): the cooldown the server started,
+                // already shortened by haste.
+                SkillBook.StartCooldown(p.SkillId, p.CooldownMs);
+
+                if (p.SkillId == DefaultSkillId)
+                {
+                    _cooldownLength = p.CooldownMs / 1000.0;
+                    _readyAt = Time.realtimeSinceStartupAsDouble + _cooldownLength;
+                }
             }
 
             if (where.HasValue)
-                DamageNumbersUI.Spawn(where.Value, p.Damage, mine, hitMe);
+            {
+                var outcome = (ArcheCore.Network.Shared.Combat.HitOutcome)p.Outcome;
+
+                // Damage (or a miss) - a plain skill with no damage (a taunt,
+                // a buff) shows nothing.
+                if (p.Damage > 0 || outcome == ArcheCore.Network.Shared.Combat.HitOutcome.Miss)
+                    DamageNumbersUI.Spawn(where.Value, p.Damage, mine, hitMe, outcome, p.StatusId != 0);
+
+                if (p.Healed > 0)
+                    DamageNumbersUI.SpawnHeal(where.Value, p.Healed, outcome == ArcheCore.Network.Shared.Combat.HitOutcome.Crit);
+            }
 
             OnCombatEvent?.Invoke(p);
 
